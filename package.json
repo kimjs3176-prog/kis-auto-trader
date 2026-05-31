@@ -1,0 +1,74 @@
+{
+  "name": "kis-auto-trader",
+  "productName": "KIS Auto Trader",
+  "version": "1.0.0",
+  "description": "한국투자증권 Open API 기반 주식 자동매매 데스크탑 앱",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build:vite": "vite build",
+    "build:win": "npm run build:vite && electron-builder --win --x64",
+    "build:win32": "npm run build:vite && electron-builder --win --ia32",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "vite": "^5.4.21",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.kisautotrader.app",
+    "productName": "KIS Auto Trader",
+    "copyright": "Copyright © 2025 KIS Auto Trader",
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KIS Auto Trader",
+      "include": "electron/installer.nsh",
+      "installerLanguages": [
+        "Korean"
+      ],
+      "language": "1042"
+    },
+    "extraResources": [
+      {
+        "from": "electron/preload.js",
+        "to": "preload.js"
+      }
+    ]
+  }
+}
