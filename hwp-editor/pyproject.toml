@@ -1,0 +1,25 @@
+[project]
+name = "hwpkit"
+version = "2.0.0"
+description = "한글 문서 도우미 — 한/글(HWP) 문서 작업 자동화 (범정부오피스 개선판)"
+requires-python = ">=3.10"
+dependencies = [
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+excel = ["openpyxl>=3.1"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+hwpkit = "hwpkit.cli:주실행"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["hwpkit*"]
+
+[tool.setuptools.package-data]
+hwpkit = ["presets/*.json", "presets/forms/*"]

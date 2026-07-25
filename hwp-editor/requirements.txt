@@ -1,0 +1,8 @@
+# 윈도우에서 한/글(HWP) COM 자동화에 필요합니다.
+pywin32>=306; sys_platform == "win32"
+
+# 메일머지에서 .xlsx 를 직접 읽을 때만 필요합니다. (CSV 만 쓰면 없어도 됩니다)
+openpyxl>=3.1
+
+# 시험 실행용
+pytest>=8.0
