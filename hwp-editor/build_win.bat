@@ -1,28 +1,68 @@
 @echo off
-rem ìœˆë„ìš° ì‹¤í–‰ íŒŒì¼ ë§Œë“¤ê¸° (ì›ë³¸ê³¼ ê°™ì€ PyInstaller ë°©ì‹)
-rem ì›ë³¸ì€ ë²„íŠ¼ PNG 17MB ë•Œë¬¸ì— 27MB ì˜€ì§€ë§Œ, ì´ ë²„ì „ì€ ì´ë¯¸ì§€ê°€ ì—†ì–´ í›¨ì”¬ ì‘ìŠµë‹ˆë‹¤.
-setlocal
-chcp 65001 >nul
+rem ============================================================
+rem  ÇÑ±Û ¹®¼­ µµ¿ì¹Ì (HwpKit) - À©µµ¿ì ½ÇÇà ÆÄÀÏ ¸¸µé±â
+rem  ÀÌ ÆÄÀÏÀ» µÎ ¹ø ´­·¯ ½ÇÇàÇÏ¸é dist Æú´õ¿¡ exe °¡ ¸¸µé¾îÁı´Ï´Ù.
+rem  (ÇÑ±ÛÀÌ ±úÁ® º¸ÀÌ¸é ÀÌ ÆÄÀÏÀ» ¸Ş¸ğÀå¿¡¼­ "ANSI" ·Î ´Ù½Ã ÀúÀåÇÏ¼¼¿ä)
+rem ============================================================
+setlocal enabledelayedexpansion
+cd /d "%~dp0"
 
-python -m pip install --upgrade pip pyinstaller || goto :error
-python -m pip install -r requirements.txt || goto :error
-python -m pytest || goto :error
+echo [1/5] ÆÄÀÌ½ã È®ÀÎ
+python --version >nul 2>&1
+if errorlevel 1 (
+  echo    ÆÄÀÌ½ãÀÌ ¾ø½À´Ï´Ù. https://www.python.org ¿¡¼­ 3.10 ÀÌ»óÀ» ¼³Ä¡ÇÏ¼¼¿ä.
+  echo    ¼³Ä¡ÇÒ ¶§ "Add python.exe to PATH" ¸¦ ÄÑ ÁÖ¼¼¿ä.
+  goto :fail
+)
+python -c "import struct,sys;sys.exit(0 if struct.calcsize('P')*8==64 else 1)"
+if errorlevel 1 echo    ¾Ë¸²: 32ºñÆ® ÆÄÀÌ½ãÀÔ´Ï´Ù. ÇÑ/±ÛÀÌ 64ºñÆ®¸é 64ºñÆ® ÆÄÀÌ½ãÀ» ¾²¼¼¿ä.
 
-pyinstaller --noconfirm --clean ^
-  --name í•œê¸€ë¬¸ì„œë„ìš°ë¯¸ ^
-  --onefile ^
-  --windowed ^
-  --add-data "hwpkit\presets;hwpkit\presets" ^
-  --hidden-import win32com.client ^
-  --hidden-import pythoncom ^
-  --hidden-import pywintypes ^
-  run.py || goto :error
+echo [2/5] ºôµå È¯°æ ÁØºñ (°¡»óÈ¯°æ .venv)
+if not exist ".venv\Scripts\python.exe" (
+  python -m venv .venv
+  if errorlevel 1 goto :fail
+)
+set "PY=.venv\Scripts\python.exe"
+"%PY%" -m pip install --upgrade --quiet pip
+if errorlevel 1 goto :fail
+"%PY%" -m pip install --quiet -r requirements.txt pyinstaller
+if errorlevel 1 goto :fail
 
+echo [3/5] ½ÃÇè ½ÇÇà
+"%PY%" -m pytest -q
+if errorlevel 1 (
+  echo    ½ÃÇèÀÌ ½ÇÆĞÇß½À´Ï´Ù. ºôµå¸¦ ¸ØÃä´Ï´Ù.
+  goto :fail
+)
+
+echo [4/5] ½ÇÇà ÆÄÀÏ ¸¸µé±â
+rem Æú´õ ÇüÅÂ·Î ¸¸µé·Á¸é ´ÙÀ½ ÁÙ ¸Ç ¾ÕÀÇ rem À» Áö¿ì¼¼¿ä.
+rem Æú´õ ÇüÅÂ´Â ½ÃÀÛÀÌ ºü¸£°í ¹é½Å ¿ÀÅ½ÀÌ Àû½À´Ï´Ù. (¹èÆ÷¾È³».md Âü°í)
+rem set HWPKIT_ONEDIR=1
+if exist build rmdir /s /q build
+"%PY%" -m PyInstaller --noconfirm --clean hwpkit.spec
+if errorlevel 1 goto :fail
+
+echo [5/5] ¸¶¹«¸®
+set "RESULT=dist\ÇÑ±Û¹®¼­µµ¿ì¹Ì\ÇÑ±Û¹®¼­µµ¿ì¹Ì.exe"
+if exist "dist\ÇÑ±Û¹®¼­µµ¿ì¹Ì.exe" set "RESULT=dist\ÇÑ±Û¹®¼­µµ¿ì¹Ì.exe"
+if not exist "!RESULT!" (
+  echo    ½ÇÇà ÆÄÀÏÀ» Ã£Áö ¸øÇß½À´Ï´Ù. À§ ¸Ş½ÃÁö¸¦ È®ÀÎÇÏ¼¼¿ä.
+  goto :fail
+)
 echo.
-echo ì™„ë£Œ: dist\í•œê¸€ë¬¸ì„œë„ìš°ë¯¸.exe
-goto :eof
-
-:error
+echo    ¿Ï·á: !RESULT!
+for %%F in ("!RESULT!") do echo    Å©±â: %%~zF ¹ÙÀÌÆ®
 echo.
-echo ë¹Œë“œì— ì‹¤íŒ¨í–ˆìŠµë‹ˆë‹¤. ìœ„ ë©”ì‹œì§€ë¥¼ í™•ì¸í•˜ì„¸ìš”.
+echo    ´ÙÀ½ ´Ü°è (º¸¾È °æ°í¸¦ ¾ø¾Ö·Á¸é)
+echo      1) ÄÚµå ¼­¸í ÀÎÁõ¼­°¡ ÀÖÀ¸¸é:  sign_win.bat "!RESULT!"
+echo      2) ÀÎÁõ¼­°¡ ¾øÀ¸¸é ¹èÆ÷¾È³».md ÀÇ "ÀÎÁõ¼­ ¾øÀÌ ¹èÆ÷ÇÒ ¶§" ¸¦ µû¸£¼¼¿ä.
+echo.
+pause
+exit /b 0
+
+:fail
+echo.
+echo    ºôµå¿¡ ½ÇÆĞÇß½À´Ï´Ù. À§ ¸Ş½ÃÁö¸¦ È®ÀÎÇÏ¼¼¿ä.
+pause
 exit /b 1

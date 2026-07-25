@@ -1,0 +1,38 @@
+# 윈도우 실행 파일에 심는 버전·제조사 정보 (PyInstaller 가 읽는 파일)
+#
+# 이 정보가 없으면 윈도우 속성창에 아무것도 표시되지 않아 바이러스 백신이
+# "출처를 알 수 없는 파일" 로 더 의심하고, 사용자도 신뢰할 근거가 없습니다.
+# 회사에서 쓸 때는 CompanyName·LegalCopyright 를 기관 이름으로 바꿔 주세요.
+
+VSVersionInfo(
+    ffi=FixedFileInfo(
+        filevers=(2, 0, 0, 0),
+        prodvers=(2, 0, 0, 0),
+        mask=0x3F,
+        flags=0x0,
+        OS=0x40004,
+        fileType=0x1,
+        subtype=0x0,
+        date=(0, 0),
+    ),
+    kids=[
+        StringFileInfo(
+            [
+                StringTable(
+                    "041204B0",  # 한국어(ko-KR), 유니코드
+                    [
+                        StringStruct("CompanyName", "한글 문서 도우미"),
+                        StringStruct("FileDescription", "한글(HWP) 문서 작업 도우미"),
+                        StringStruct("FileVersion", "2.0.0.0"),
+                        StringStruct("InternalName", "hwpkit"),
+                        StringStruct("LegalCopyright", "사내 업무용 도구"),
+                        StringStruct("OriginalFilename", "한글문서도우미.exe"),
+                        StringStruct("ProductName", "한글 문서 도우미 (HwpKit)"),
+                        StringStruct("ProductVersion", "2.0.0.0"),
+                    ],
+                )
+            ]
+        ),
+        VarFileInfo([VarStruct("Translation", [0x0412, 1200])]),
+    ],
+)
