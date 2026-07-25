@@ -342,3 +342,105 @@ def test_일괄_보고서문구(tmp_path):
     작업 = batch.일괄작업(PDF변환=True, 저장=False)
     보고 = batch.일괄실행(문서객체, tmp_path, 작업).보고서()
     assert "가.hwp" in 보고 and "1개 처리" in 보고
+
+
+# ------------------------------------------------------------------ 연결 계층
+def test_늦은바인딩을_쓴다():
+    """exe 로 묶으면 gencache(EnsureDispatch)는 캐시를 쓸 수 없어 실패한다.
+
+    실제로 첫 exe 빌드가 이 문제로 '한/글을 실행할 수 없습니다' 를 냈다.
+    늦은 바인딩(Dispatch)으로 되돌아가지 않도록 지켜 준다.
+    """
+    import ast
+
+    본문 = (Path(__file__).resolve().parent.parent / "hwpkit/core/connection.py").read_text(
+        encoding="utf-8"
+    )
+    나무 = ast.parse(본문)
+    # 설명(문서화 문자열)에는 EnsureDispatch 가 나올 수 있으므로 실제 코드만 본다.
+    이름들 = {
+        노드.attr if isinstance(노드, ast.Attribute) else 노드.id
+        for 노드 in ast.walk(나무)
+        if isinstance(노드, (ast.Attribute, ast.Name))
+    }
+    가져온것 = {
+        별칭.name
+        for 노드 in ast.walk(나무)
+        if isinstance(노드, ast.ImportFrom)
+        for 별칭 in 노드.names
+    }
+    assert "EnsureDispatch" not in 이름들 | 가져온것, "gencache.EnsureDispatch 는 exe 에서 실패한다"
+    assert "Dispatch" in 가져온것
+
+
+def test_스레드마다_COM초기화한다():
+    """화면은 기능을 작업 스레드에서 돌리므로 스레드별 CoInitialize 가 필요하다."""
+    본문 = (Path(__file__).resolve().parent.parent / "hwpkit/core/connection.py").read_text(
+        encoding="utf-8"
+    )
+    assert "threading.local()" in 본문
+    assert "CoInitialize" in 본문
+
+
+def test_프로그램ID_후보():
+    from hwpkit.core.connection import 프로그램ID들
+
+    assert "HWPFrame.HwpObject" in 프로그램ID들
+    assert len(프로그램ID들) >= 2, "버전에 따라 .1 이 붙은 ProgID 만 등록된 경우가 있다"
+
+
+def test_사용가능_리눅스에서는_거짓():
+    from hwpkit.core.connection import 사용가능
+
+    가능, 이유 = 사용가능()
+    assert 가능 is False and "윈도우" in 이유
+
+
+def test_진단은_환경부터_보고한다():
+    from hwpkit.core.connection import 진단
+
+    말 = 진단()
+    assert "[실행 환경]" in 말
+    assert "비트" in 말 and "실행 형태" in 말
+    assert "[중단]" in 말  # 리눅스에서는 여기서 멈춘다
+
+
+def test_진단명령_등록됨():
+    하나 = commands.찾기("도구.연결진단")
+    문서객체, _한글 = 문서만들기()
+    말 = 하나.실행(commands.맥락(문서객체=문서객체))
+    assert "[실행 환경]" in 말
+
+
+def test_CLI_영문별칭(capsys):
+    """한글 인자가 깨지는 콘솔(예: 일부 cmd 설정)에서도 쓸 수 있어야 한다."""
+    from hwpkit.cli import 주실행
+
+    assert 주실행(["list", "--분류", "도구"]) == 0
+    출력 = capsys.readouterr().out
+    assert "도구.연결진단" in 출력
+
+    assert 주실행(["help", "표.합계행"]) == 0
+    assert "합계" in capsys.readouterr().out
+
+
+def test_CLI_출력글자표를_UTF8로_맞춘다(monkeypatch):
+    """영문 윈도우(cp1252) 콘솔에서 한글을 찍다 죽지 않아야 한다."""
+    import io
+    import sys
+
+    from hwpkit.cli import _출력글자표맞추기
+
+    바뀐: list[tuple] = []
+
+    class 가짜흐름(io.StringIO):
+        def reconfigure(self, **인자):
+            바뀐.append(인자)
+
+    monkeypatch.setattr(sys, "stdout", 가짜흐름())
+    monkeypatch.setattr(sys, "stderr", 가짜흐름())
+    _출력글자표맞추기()
+    assert 바뀐 == [
+        {"encoding": "utf-8", "errors": "replace"},
+        {"encoding": "utf-8", "errors": "replace"},
+    ]
