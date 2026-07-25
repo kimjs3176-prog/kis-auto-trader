@@ -94,7 +94,12 @@ exe 에는 아이콘과 제조사·버전 정보가 들어가고, UPX 압축을 
 
 > 원본과 마찬가지로 실제 문서 편집은 **윈도우 + 한/글(한컴오피스)** 환경에서만 됩니다.
 > 리눅스·맥에서는 기능 목록·도움말·테스트만 확인할 수 있습니다.
-> exe 는 윈도우에서만 만들 수 있습니다(PyInstaller 는 교차 빌드를 지원하지 않음).
+윈도우 PC 가 없다면 리눅스에서 Wine 으로도 만들 수 있습니다(결과물은 진짜 윈도우 실행 파일).
+
+```bash
+sudo apt-get install -y --no-install-recommends wine64
+bash build_wine.sh            # dist_wine\한글문서도우미.exe
+```
 
 ## 쓰는 방법
 
@@ -188,6 +193,7 @@ tests/         252개 (COM 대역 `fake_hwp.py`, 빌드 파일 점검 포함)
 
 빌드·배포
   build_win.bat      윈도우 exe 만들기 (시험 통과 후 빌드)
+  build_wine.sh      리눅스에서 Wine 으로 윈도우 exe 만들기
   sign_win.bat       코드 서명 + 시간 도장 + 해시 출력
   hwpkit.spec        PyInstaller 설정 (UPX 끔·아이콘·버전정보·asInvoker)
   version_info.txt   exe 속성창에 표시되는 제조사·버전
