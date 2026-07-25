@@ -18,7 +18,7 @@ import contextlib
 import logging
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 from . import units
@@ -75,11 +75,16 @@ class 셀주소:
 
 @dataclass(frozen=True)
 class 셀범위:
-    """선택된 셀 블록의 사각 범위."""
+    """선택된 셀 블록의 사각 범위.
+
+    `주소별목록` 이 있으면 'B3' 같은 주소로 셀을 바로 찾을 수 있다. 병합된 셀이
+    있어 주소가 빠진 자리는 지도에 없으므로, 부르는 쪽에서 빈 칸으로 다루면 된다.
+    """
 
     시작: 셀주소
     끝: 셀주소
     목록번호: tuple[int, ...] = ()
+    주소별목록: dict[str, int] = field(default_factory=dict)
 
     @property
     def 행수(self) -> int:
@@ -325,7 +330,8 @@ class 문서:
             raise 상태오류("선택한 셀을 확인하지 못했습니다.")
         시작 = 셀주소(열=min(주.열 for 주 in 주소들), 행=min(주.행 for 주 in 주소들))
         끝 = 셀주소(열=max(주.열 for 주 in 주소들), 행=max(주.행 for 주 in 주소들))
-        return 셀범위(시작=시작, 끝=끝, 목록번호=tuple(번호들))
+        지도 = {주소.이름: 번호 for 주소, 번호 in zip(주소들, 번호들)}
+        return 셀범위(시작=시작, 끝=끝, 목록번호=tuple(번호들), 주소별목록=지도)
 
     def 셀로이동(self, 목록번호: int) -> bool:
         """목록 번호(셀 식별자)로 커서를 옮긴다."""
@@ -335,6 +341,11 @@ class 문서:
         자리.SetItem("Para", 0)
         자리.SetItem("Pos", 0)
         return bool(한글.SetPosBySet(자리))
+
+    def 셀주소로이동(self, 범위: 셀범위, 열: int, 행: int) -> bool:
+        """범위 안의 (열, 행) 셀로 커서를 옮긴다. 그 자리가 없으면 False."""
+        번호 = 범위.주소별목록.get(셀주소(열=열, 행=행).이름)
+        return self.셀로이동(번호) if 번호 is not None else False
 
     def 셀선택(self) -> None:
         """현재 셀 하나를 블록으로 잡는다."""
@@ -360,6 +371,36 @@ class 문서:
         for 목록 in 범위.목록번호 or ():
             if self.셀로이동(목록):
                 yield 목록
+
+    def 사진넣기(self, 경로: str, 셀맞춤: bool = True) -> None:
+        """현재 위치(또는 선택한 셀)에 그림을 넣는다.
+
+        InsertPicture 인자는 (경로, 문서에포함, 크기옵션, 뒤집기, 워터마크, 효과) 다.
+        크기옵션 3 = 셀 크기에 맞춤 — 사진 대장을 만들 때 필요하다.
+        """
+        경로 = os.path.abspath(경로)
+        if not os.path.isfile(경로):
+            raise 입력오류(f"그림 파일이 없습니다: {경로}")
+        self.한글.InsertPicture(경로, 1, 3 if 셀맞춤 else 0, 0, 0, 0)
+        self._편집수 += 1
+        self.실행("ParagraphShapeAlignCenter")
+
+    def 현재쪽(self) -> int | None:
+        """커서가 있는 쪽 번호. 알 수 없으면 None.
+
+        한/글의 KeyIndicator 는 (성공, 구역, 쪽, 단, 줄, 칸 …) 형태로 알려져 있지만
+        버전에 따라 구성이 달라질 수 있다. 확실하지 않으면 추측하지 않고 None 을
+        돌려주고, 부르는 쪽에서 쪽번호 없이 처리한다.
+        """
+        try:
+            표시 = self.한글.KeyIndicator()
+        except Exception:  # noqa: BLE001
+            return None
+        정수들 = [값 for 값 in (표시 or ()) if isinstance(값, int)]
+        if len(정수들) < 3:
+            return None
+        쪽 = 정수들[2]
+        return 쪽 if isinstance(쪽, int) and 쪽 > 0 else None
 
     # --------------------------------------------------------------- 필드
     def 필드목록(self) -> list[str]:

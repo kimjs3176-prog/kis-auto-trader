@@ -99,8 +99,18 @@ class 가짜HAction:
             self.한글.선택중 = False
         elif 이름 in ("TableCellBlock", "TableCellBlockExtend", "SelectAll"):
             self.한글.선택중 = True
-        elif 이름 == "TableRightCell":
-            self.한글._다음셀()
+        elif 이름 in ("TableRightCell", "TableRightCellAppend"):
+            self.한글._옆셀(1)
+        elif 이름 == "TableLeftCell":
+            self.한글._옆셀(-1)
+        elif 이름 == "TableLowerCell":
+            self.한글._아래셀(1)
+        elif 이름 == "TableUpperCell":
+            self.한글._아래셀(-1)
+        elif 이름 == "TableInsertLowerRow":
+            self.한글._줄추가()
+        elif 이름 == "TableInsertRightColumn":
+            self.한글._칸추가()
         elif 이름 == "CloseEx":
             self.한글.CellShape = None
             self.한글.셀값 = {}
@@ -171,6 +181,7 @@ class 가짜한글:
         self.필드이름: list[str] = []
         self.열린파일: str = ""
         self.등록모듈: list[tuple[str, str]] = []
+        self.넣은그림: list[tuple[str, int]] = []
 
     # ------------------------------------------------------------ 내부
     def _텍스트입력(self, 값: str) -> None:
@@ -194,12 +205,75 @@ class 가짜한글:
         self.현재목록 = 1
         self.CellShape = 1
 
-    def _다음셀(self) -> None:
-        번호들 = sorted(self.셀값)
-        if self.현재목록 in 번호들:
-            자리 = 번호들.index(self.현재목록)
-            if 자리 + 1 < len(번호들):
-                self.현재목록 = 번호들[자리 + 1]
+    def _주소풀기(self, 주소: str) -> tuple[int, int]:
+        """'B3' → (열 2, 행 3)"""
+        열글자 = "".join(글자 for 글자 in 주소 if 글자.isalpha())
+        행글자 = "".join(글자 for 글자 in 주소 if 글자.isdigit())
+        열 = 0
+        for 글자 in 열글자:
+            열 = 열 * 26 + (ord(글자.upper()) - ord("A") + 1)
+        return 열, int(행글자 or 1)
+
+    def _주소만들기(self, 열: int, 행: int) -> str:
+        문자 = ""
+        값 = 열
+        while 값 > 0:
+            값, 나머지 = divmod(값 - 1, 26)
+            문자 = chr(ord("A") + 나머지) + 문자
+        return f"{문자}{행}"
+
+    def _번호찾기(self, 열: int, 행: int) -> int | None:
+        찾는주소 = self._주소만들기(열, 행)
+        for 번호, 주소 in self.셀주소.items():
+            if 주소 == 찾는주소:
+                return 번호
+        return None
+
+    def _옆셀(self, 걸음: int) -> None:
+        열, 행 = self._주소풀기(self.셀주소.get(self.현재목록, "A1"))
+        번호 = self._번호찾기(열 + 걸음, 행)
+        if 번호 is None:  # 줄 끝이면 다음 줄 첫 칸으로 (한/글과 같은 동작)
+            번호 = self._번호찾기(1, 행 + 걸음)
+        if 번호 is not None:
+            self.현재목록 = 번호
+
+    def _아래셀(self, 걸음: int) -> None:
+        열, 행 = self._주소풀기(self.셀주소.get(self.현재목록, "A1"))
+        번호 = self._번호찾기(열, 행 + 걸음)
+        if 번호 is not None:
+            self.현재목록 = 번호
+
+    def _줄추가(self) -> None:
+        """현재 줄 아래에 빈 줄을 넣는다. (마지막 줄 아래 추가만 흉내 낸다)"""
+        _열, 행 = self._주소풀기(self.셀주소.get(self.현재목록, "A1"))
+        열수 = max(self._주소풀기(주소)[0] for 주소 in self.셀주소.values())
+        마지막행 = max(self._주소풀기(주소)[1] for 주소 in self.셀주소.values())
+        if 행 != 마지막행:
+            return
+        다음번호 = max(self.셀값, default=0) + 1
+        for 열 in range(1, 열수 + 1):
+            self.셀값[다음번호] = ""
+            self.셀주소[다음번호] = self._주소만들기(열, 행 + 1)
+            다음번호 += 1
+
+    def _칸추가(self) -> None:
+        """현재 칸 오른쪽에 빈 칸을 넣는다. (마지막 열 오른쪽 추가만 흉내 낸다)"""
+        열, _행 = self._주소풀기(self.셀주소.get(self.현재목록, "A1"))
+        열수 = max(self._주소풀기(주소)[0] for 주소 in self.셀주소.values())
+        행수 = max(self._주소풀기(주소)[1] for 주소 in self.셀주소.values())
+        if 열 != 열수:
+            return
+        다음번호 = max(self.셀값, default=0) + 1
+        for 행 in range(1, 행수 + 1):
+            self.셀값[다음번호] = ""
+            self.셀주소[다음번호] = self._주소만들기(열수 + 1, 행)
+            다음번호 += 1
+
+    def InsertPicture(self, 경로: str, *_인자) -> bool:
+        self.넣은그림.append((경로, self.현재목록))
+        if self.셀값 and self.CellShape:
+            self.셀값[self.현재목록] = f"[그림:{경로}]"
+        return True
 
     # ------------------------------------------------------------ COM 대역
     def CreateAction(self, 이름: str) -> 가짜액션:
