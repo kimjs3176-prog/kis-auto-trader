@@ -288,6 +288,7 @@ class 타일(tk.Canvas):
         self.명령 = 명령하나
         글머리, 강조 = theme.분류모습(명령하나.분류)
         self._강조 = 강조
+        self._골라짐 = False
 
         여백 = max(2, 크기 // 26)
         안쪽 = 크기 - 여백
@@ -356,10 +357,35 @@ class 타일(tk.Canvas):
             오른쪽 - 점, 여백 + 8, 오른쪽, 여백 + 8 + 점, fill=self._강조, outline=""
         )
 
+    def 고르기(self, 참: bool) -> None:
+        """고른 타일에 파란 테를 두른다.
+
+        세부설정을 아래쪽에 띄워 둔 채 격자를 그대로 보여 주므로, 지금 어느
+        기능을 만지고 있는지 카드로 알 수 있어야 한다.
+        """
+        참 = bool(참)
+        if 참 == self._골라짐:
+            return
+        self._골라짐 = 참
+        self._칠하기()
+
+    def _칠하기(self, 가리킴중: bool = False) -> None:
+        if self._골라짐:
+            self.itemconfigure(
+                self._카드, fill=theme.파랑옅게, outline=theme.파랑, width=2
+            )
+            return
+        self.itemconfigure(
+            self._카드,
+            fill=theme.카드가리킴 if 가리킴중 else theme.카드,
+            outline="",
+            width=1,
+        )
+
     def _들어옴(self, 가리킴: Callable[[Any | None], None]) -> None:
-        self.itemconfigure(self._카드, fill=theme.카드가리킴)
+        self._칠하기(가리킴중=True)
         가리킴(self.명령)
 
     def _나감(self, 가리킴: Callable[[Any | None], None]) -> None:
-        self.itemconfigure(self._카드, fill=theme.카드)
+        self._칠하기()
         가리킴(None)

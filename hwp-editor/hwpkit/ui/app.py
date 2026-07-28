@@ -14,8 +14,10 @@
       색이 달라, 목록을 읽지 않고 눈으로 찾는다. 패널 너비에 맞춰 칸 수가 저절로
       바뀌고, 타일 크기는 '칸' 단추로 세 단계로 바꾼다.
     · 검색칸에 낱말을 넣으면 타일이 즉시 걸러진다(명령 팔레트).
-    · 타일을 누르면 같은 자리에 실행판이 열린다. 입력칸은 `commands.입력항목`
-      정의만 보고 자동으로 만든다 — 기능마다 창을 따로 만들지 않는다.
+    · 타일을 누르면 **격자를 그대로 둔 채 아래쪽에 세부설정 판**이 열린다. 고른
+      타일에는 파란 테가 둘려, 무엇을 만지는 중인지 한눈에 보인다. 입력칸은
+      `commands.입력항목` 정의만 보고 자동으로 만든다 — 기능마다 창을 따로
+      만들지 않는다.
 
 배색은 토스(Toss) 앱을 참고했다(`theme.py`). 둥근 카드·알약 단추는 tkinter 기본
 위젯으로 되지 않아 캔버스에 직접 그린다(`widgets.py`). 창 자리·칸 수 같은 계산은
@@ -167,7 +169,7 @@ class 본창(tk.Tk):
             darkcolor=theme.파랑,
             focuscolor=theme.파랑,
             borderwidth=0,
-            padding=(20, 9),
+            padding=(16, 7),
             font=(theme.글꼴, 10, "bold"),
         )
         스타일.map(
@@ -199,16 +201,24 @@ class 본창(tk.Tk):
 
     # ------------------------------------------------------------------ 뼈대
     def _뼈대(self) -> None:
+        """머리 / 분류 칩 / [타일 격자 + 아래쪽 세부설정] / 상태줄.
+
+        타일을 눌러도 격자를 치우지 않는다. 격자는 그대로 두고 **아래쪽 빈자리에**
+        세부설정 판을 띄운다(칸 몫은 `layout.격자칸높이`). 예전에는 같은 자리에
+        실행판을 겹쳐 올려(`tkraise`) 격자가 사라졌는데, 그러면 어느 기능을
+        골랐는지 다시 목록으로 나가야 알 수 있었다.
+        """
         self._머리만들기()
         self.가운데 = tk.Frame(self, bg=theme.바탕)
         self.가운데.pack(fill="both", expand=True)
-        self.가운데.grid_rowconfigure(0, weight=1)
+        self.가운데.grid_rowconfigure(0, weight=1)  # 타일 격자
+        self.가운데.grid_rowconfigure(1, weight=0)  # 세부설정 (고를 때만 보인다)
         self.가운데.grid_columnconfigure(0, weight=1)
         self._격자만들기()
         self._실행판만들기()
         self.격자틀.grid(row=0, column=0, sticky="nsew")
-        self.실행판.grid(row=0, column=0, sticky="nsew")
-        self.격자틀.tkraise()
+        self.실행판.grid(row=1, column=0, sticky="nsew")
+        self.실행판.grid_remove()  # 타일을 누를 때까지 감춘다
 
         self.상태값 = tk.StringVar(value=self._기본상태)
         tk.Label(
@@ -218,11 +228,11 @@ class 본창(tk.Tk):
             fg=theme.흐린글,
             anchor="w",
             font=(theme.글꼴, 9),
-        ).pack(fill="x", padx=14, pady=(0, 8))
+        ).pack(fill="x", padx=8, pady=(1, 3))
 
     def _머리만들기(self) -> None:
         self.머리 = tk.Frame(self, bg=theme.바탕)
-        self.머리.pack(fill="x", padx=12, pady=(10, 0))
+        self.머리.pack(fill="x", padx=8, pady=(6, 0))
 
         # (1) 이름 + 붙일 자리
         self.이름틀 = tk.Frame(self.머리, bg=theme.바탕)
@@ -252,7 +262,7 @@ class 본창(tk.Tk):
         self.이름틀.pack(fill="x")
 
         # (2) 검색칸
-        self.검색틀 = 둥근칸(self.머리, 높이=36)
+        self.검색틀 = 둥근칸(self.머리, 높이=32)
         self.검색값 = tk.StringVar(value=_자리글)
         self.검색칸 = tk.Entry(
             self.검색틀.속,
@@ -279,11 +289,11 @@ class 본창(tk.Tk):
         )
         self._지움표.bind("<Button-1>", lambda _사건: self._검색지우기())
 
-        self.검색틀.pack(fill="x", pady=(8, 0))
+        self.검색틀.pack(fill="x", pady=(5, 0))
 
         # (3) 도구 — 타일 크기 · 항상 위 · 투명도
         self.도구틀 = tk.Frame(self.머리, bg=theme.바탕)
-        self.도구틀.pack(fill="x", pady=(8, 0))
+        self.도구틀.pack(fill="x", pady=(5, 0))
         self.칸단추 = 알약단추(
             self.도구틀, self._칸이름(), 누름=self._타일크기바꾸기, 높이=26, 안여백=10
         )
@@ -329,7 +339,7 @@ class 본창(tk.Tk):
 
         # (4) 분류 칩 — grid 는 열 너비를 줄끼리 나눠 쓰므로 place 로 놓는다.
         self.분류틀 = tk.Frame(self, bg=theme.바탕, height=30)
-        self.분류틀.pack(fill="x", padx=12, pady=(8, 2))
+        self.분류틀.pack(fill="x", padx=8, pady=(5, 1))
         self.분류 = "전체"
         self._칩들: list[알약단추] = []
         for 이름 in ("전체", *commands.분류순서):
@@ -350,28 +360,37 @@ class 본창(tk.Tk):
         self.격자안 = self.격자틀.내용
 
     def _실행판만들기(self) -> None:
-        """실행판 — 머리 / 설명 / 입력칸 / 실행 단추 / 결과칸.
+        """세부설정 판 — 가름선 / 머리 / 설명 / 입력칸 / 실행 단추 / 결과칸.
 
+        격자 아래에 붙는 판이라 위쪽에 가름선을 한 줄 그어 격자와 구분한다.
         칸 몫은 grid 로 나눈다. 입력칸이 짧은 기능이 대부분이라 pack 으로 두면
         가운데가 텅 비고 결과만 아래에 눌려 있었다. 결과 쪽에 더 큰 몫을 준다.
         """
         self.실행판 = tk.Frame(self.가운데, bg=theme.바탕)
         self.실행판.grid_columnconfigure(0, weight=1)
-        self.실행판.grid_rowconfigure(2, weight=2, minsize=90)  # 입력칸
-        self.실행판.grid_rowconfigure(4, weight=5, minsize=170)  # 결과칸
+        # 남는 자리는 입력칸에 먼저 준다. 결과는 넘쳐도 구르면 되지만, 입력칸이
+        # 짧으면 어떤 항목이 있는지 보려고 스크롤해야 해서 훨씬 불편하다.
+        self.실행판.grid_rowconfigure(3, weight=4, minsize=60)  # 입력칸
+        self.실행판.grid_rowconfigure(5, weight=1, minsize=104)  # 결과칸
+
+        tk.Frame(self.실행판, bg=theme.테두리, height=1).grid(
+            row=0, column=0, sticky="ew"
+        )
 
         머리 = tk.Frame(self.실행판, bg=theme.바탕)
-        머리.grid(row=0, column=0, sticky="ew", padx=12, pady=(6, 4))
-        알약단추(머리, "← 목록", 누름=self._목록으로, 높이=26, 안여백=10).pack(side="left")
+        머리.grid(row=1, column=0, sticky="ew", padx=8, pady=(5, 2))
         self.기능제목 = tk.Label(
             머리,
             text="",
             bg=theme.바탕,
             fg=theme.진한글,
-            font=(theme.글꼴, 12, "bold"),
+            font=(theme.글꼴, 11, "bold"),
             anchor="w",
         )
-        self.기능제목.pack(side="left", padx=10, fill="x", expand=True)
+        self.기능제목.pack(side="left", fill="x", expand=True)
+        알약단추(머리, "✕ 닫기", 누름=self._세부판닫기, 높이=24, 안여백=9).pack(
+            side="right", padx=(6, 0)
+        )
 
         self.기능설명 = tk.Label(
             self.실행판,
@@ -383,15 +402,15 @@ class 본창(tk.Tk):
             wraplength=340,
             font=(theme.글꼴, 9),
         )
-        self.기능설명.grid(row=1, column=0, sticky="ew", padx=14)
+        self.기능설명.grid(row=2, column=0, sticky="ew", padx=9)
         self.실행판.bind("<Configure>", self._설명줄맞춤)
 
         self.입력스크롤 = 스크롤틀(self.실행판, theme.바탕)
-        self.입력스크롤.grid(row=2, column=0, sticky="nsew", padx=8, pady=4)
+        self.입력스크롤.grid(row=3, column=0, sticky="nsew", padx=4, pady=(3, 2))
         self.입력틀 = self.입력스크롤.내용
 
         단추줄 = tk.Frame(self.실행판, bg=theme.바탕)
-        단추줄.grid(row=3, column=0, sticky="ew", padx=12)
+        단추줄.grid(row=4, column=0, sticky="ew", padx=8)
         self.실행단추 = ttk.Button(
             단추줄, text="실행", style="주.TButton", command=self._실행
         )
@@ -402,23 +421,22 @@ class 본창(tk.Tk):
         self.결과지움.pack(side="left")
 
         결과틀 = tk.Frame(self.실행판, bg=theme.바탕)
-        결과틀.grid(row=4, column=0, sticky="nsew", padx=12, pady=(6, 8))
-        tk.Label(
-            결과틀, text="결과", bg=theme.바탕, fg=theme.흐린글, font=(theme.글꼴, 9)
-        ).pack(anchor="w", pady=(0, 3))
+        결과틀.grid(row=5, column=0, sticky="nsew", padx=8, pady=(4, 4))
+        # '결과' 라는 라벨을 따로 두지 않는다. 머리에 기능 이름이 있고 상자가
+        # 하나뿐이라 굳이 한 줄을 더 쓸 이유가 없다.
         결과상자 = tk.Frame(결과틀, bg=theme.바탕)
         결과상자.pack(fill="both", expand=True)
         결과띠 = ttk.Scrollbar(결과상자, orient="vertical")
         결과띠.pack(side="right", fill="y")
         self.결과칸 = tk.Text(
             결과상자,
-            height=6,
+            height=3,
             wrap="word",
             bg=theme.카드,
             fg=theme.진한글,
             relief="flat",
-            padx=10,
-            pady=8,
+            padx=8,
+            pady=6,
             highlightthickness=1,
             highlightbackground=theme.테두리,
             highlightcolor=theme.테두리,
@@ -570,8 +588,7 @@ class 본창(tk.Tk):
         for 칩, 값 in zip(self._칩들, ("전체", *commands.분류순서)):
             칩.고르기(값 == 이름)
         self._자리글되돌리기()
-        self.현재명령 = None
-        self.격자틀.tkraise()
+        self._세부판닫기()
         self._타일채우기()
         self.격자틀.맨위로()
 
@@ -580,6 +597,8 @@ class 본창(tk.Tk):
         if 새칸 != self._칸:
             self._칸 = 새칸
             self._타일배치()
+            if self.현재명령 is not None:  # 줄 수가 달라졌으니 칸 몫을 다시 잡는다
+                self._세부판맞춤()
 
     def _칸이름(self) -> str:
         이름들 = {76: "칸 작게", 96: "칸 보통", 120: "칸 크게"}
@@ -610,6 +629,10 @@ class 본창(tk.Tk):
         ]
         self._타일배치()
         self.격자틀.맨위로()
+        if self.현재명령 is not None:
+            # 타일을 다시 만들었으니 고른 표시와 칸 몫도 다시 잡는다.
+            self._타일고르기(self.현재명령)
+            self._세부판맞춤()
         self._기본상태 = f"기능 {len(후보)}개" if 후보 else "찾은 기능이 없습니다."
         self.상태값.set(self._기본상태)
 
@@ -620,7 +643,7 @@ class 본창(tk.Tk):
         남음 = max(0, 너비 - 16 - 칸 * (self.타일크기 + 8))
         곁 = min(20, 남음 // (칸 * 2))
         for 자리, 하나 in enumerate(self._타일들):
-            하나.grid(row=자리 // 칸, column=자리 % 칸, padx=4 + 곁, pady=5)
+            하나.grid(row=자리 // 칸, column=자리 % 칸, padx=3 + 곁, pady=3)
 
     def _가리킴(self, 명령하나: commands.명령 | None) -> None:
         if 명령하나 is None:
@@ -629,23 +652,59 @@ class 본창(tk.Tk):
         설명 = (명령하나.설명 or "").strip()
         self.상태값.set(f"{명령하나.제목} — {설명}" if 설명 else 명령하나.제목)
 
-    # ------------------------------------------------------------------ 실행판
+    # -------------------------------------------------------------- 세부설정 판
     def _타일누름(self, 명령하나: commands.명령) -> None:
+        """타일을 누르면 격자는 그대로 두고 아래쪽에 세부설정을 띄운다."""
         self.현재명령 = 명령하나
         self.기능제목.configure(text=명령하나.제목)
         설명 = 명령하나.설명 or ""
         if 명령하나.필요:
             설명 = (설명 + "\n" if 설명 else "") + f"먼저 준비: {', '.join(명령하나.필요)}"
         self.기능설명.configure(text=설명)
+        if 설명:
+            self.기능설명.grid()
+        else:
+            self.기능설명.grid_remove()  # 빈 라벨이 한 줄을 먹지 않게
         self._입력만들기(명령하나)
         self._결과쓰기("")
-        self.실행판.tkraise()
+        self.실행판.grid()
+        self._타일고르기(명령하나)
+        self._세부판맞춤()
         self.입력스크롤.맨위로()
         self._기본상태 = 명령하나.제목
         self.상태값.set(self._기본상태)
 
-    def _목록으로(self) -> None:
-        self.격자틀.tkraise()
+    def _타일고르기(self, 명령하나: commands.명령 | None) -> None:
+        """고른 타일에만 파란 테를 두른다."""
+        번호 = 명령하나.번호 if 명령하나 is not None else None
+        for 하나 in self._타일들:
+            하나.고르기(하나.명령.번호 == 번호)
+
+    def _세부판맞춤(self) -> None:
+        """격자와 세부설정 판이 나눠 쓸 높이를 정한다.
+
+        세부설정 판은 **필요한 만큼**(최대 70%) 쓰고, 격자는 남은 자리를 쓴다.
+        타일이 몇 개뿐이면 격자가 그만큼만 차지하므로 남는 아래 자리가 통째로
+        세부설정 몫이 된다. 타일이 많으면 격자는 남은 자리 안에서 구른다.
+        """
+        self.update_idletasks()
+        가운데높이 = self.가운데.winfo_height()
+        # 입력칸 높이를 먼저 잡아야 판이 얼마나 필요한지 알 수 있다.
+        self._입력칸맞춤(int(가운데높이 * layout.세부판최대비))
+        self.update_idletasks()
+        세부판 = layout.세부판높이(self.실행판.winfo_reqheight() + 4, 가운데높이)
+        격자요구 = self.격자안.winfo_reqheight() + 6
+        self.가운데.grid_rowconfigure(
+            0, weight=0, minsize=layout.격자칸높이(격자요구, 가운데높이, 세부판)
+        )
+        self.가운데.grid_rowconfigure(1, weight=1, minsize=세부판)
+
+    def _세부판닫기(self) -> None:
+        self.현재명령 = None
+        self._타일고르기(None)
+        self.실행판.grid_remove()
+        self.가운데.grid_rowconfigure(0, weight=1, minsize=0)
+        self.가운데.grid_rowconfigure(1, weight=0, minsize=0)
         self._기본상태 = f"기능 {len(self._보이는명령)}개"
         self.상태값.set(self._기본상태)
 
@@ -664,22 +723,38 @@ class 본창(tk.Tk):
                 bg=theme.바탕,
                 fg=theme.흐린글,
                 anchor="w",
-            ).pack(fill="x", padx=6, pady=6)
+            ).pack(fill="x", padx=5, pady=4)
             self._입력칸맞춤()
             return
 
         for 항목 in 명령하나.입력:
             칸 = tk.Frame(self.입력틀, bg=theme.바탕)
-            칸.pack(fill="x", padx=6, pady=(6, 0))
-            tk.Label(
-                칸,
-                text=항목.표시,
-                bg=theme.바탕,
-                fg=theme.진한글,
-                anchor="w",
-                font=(theme.글꼴, 9, "bold"),
-            ).pack(fill="x", pady=(0, 3))
-            위젯 = self._위젯하나(칸, 항목)
+            칸.pack(fill="x", padx=5, pady=(4, 0))
+            if 항목.종류 == "체크":
+                # 켬/끔 알약은 좁으니 이름과 **한 줄에** 놓는다. 체크가 다섯 개인
+                # 기능(문서 정리)에서 줄 수가 절반으로 줄어 스크롤이 없어진다.
+                줄 = tk.Frame(칸, bg=theme.바탕)
+                줄.pack(fill="x")
+                tk.Label(
+                    줄,
+                    text=항목.표시,
+                    bg=theme.바탕,
+                    fg=theme.진한글,
+                    anchor="w",
+                    font=(theme.글꼴, 9, "bold"),
+                ).pack(side="left", fill="x", expand=True)
+                위젯 = 켬끔(줄, 켜짐=bool(항목.기본값), 높이=24, 안여백=11)
+                위젯.pack(side="right", padx=(6, 0))
+            else:
+                tk.Label(
+                    칸,
+                    text=항목.표시,
+                    bg=theme.바탕,
+                    fg=theme.진한글,
+                    anchor="w",
+                    font=(theme.글꼴, 9, "bold"),
+                ).pack(fill="x", pady=(0, 2))
+                위젯 = self._위젯하나(칸, 항목)
             self._입력위젯[항목.이름] = (항목, 위젯)
             if 항목.설명:
                 tk.Label(
@@ -691,28 +766,29 @@ class 본창(tk.Tk):
                     justify="left",
                     wraplength=320,
                     font=(theme.글꼴, 8),
-                ).pack(fill="x", pady=(3, 0))
+                ).pack(fill="x", pady=(2, 0))
         self._입력칸맞춤()
 
-    def _입력칸맞춤(self) -> None:
+    def _입력칸맞춤(self, 판높이: int = 0) -> None:
         """입력 개수에 맞춰 입력칸 높이를 잡는다. (남는 몫은 결과칸으로)"""
         self.update_idletasks()  # 방금 만든 위젯의 요청 크기를 읽으려면 먼저 재야 한다
-        요구 = self.입력틀.winfo_reqheight() + 12
+        if 판높이 <= 1:
+            판높이 = self.실행판.winfo_height()
+        if 판높이 <= 1:  # 아직 한 번도 그려지지 않은 판
+            판높이 = int(self.winfo_height() * layout.세부판최대비)
+        요구 = self.입력틀.winfo_reqheight() + 10
         self.실행판.grid_rowconfigure(
-            2, weight=2, minsize=layout.입력칸높이(요구, self.winfo_height())
+            3, weight=4, minsize=layout.입력칸높이(요구, 판높이)
         )
 
     def _위젯하나(self, 부모: tk.Frame, 항목: commands.입력항목) -> Any:
+        """이름 아래에 놓는 입력칸. (체크는 `_입력만들기` 가 한 줄로 직접 만든다)"""
         if 항목.종류 == "선택":
             값 = tk.StringVar(value=str(항목.기본값))
             ttk.Combobox(
                 부모, textvariable=값, values=list(항목.선택지), state="readonly"
             ).pack(fill="x")
             return 값
-        if 항목.종류 == "체크":
-            토글 = 켬끔(부모, 켜짐=bool(항목.기본값))
-            토글.pack(anchor="w")
-            return 토글
         if 항목.종류 == "여러줄":
             글칸 = tk.Text(
                 부모,
