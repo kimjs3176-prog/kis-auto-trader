@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 
 from hwpkit import commands
-from hwpkit.ui import layout
+from hwpkit.ui import layout, theme
 
 화면너비, 화면높이 = 1920, 1080
 
@@ -129,10 +129,13 @@ def test_타일_제목은_두_줄_안에_들어간다():
 
 
 def test_모든_분류에_글머리와_색이_있다():
+    본색 = set()
     for 이름 in commands.분류순서:
-        글머리, 색 = layout.분류모습얻기(이름)
-        assert 글머리 and 색.startswith("#")
-    assert layout.분류모습얻기("없는분류") == ("■", "#64748b")
+        글머리, 색값 = theme.분류모습(이름)
+        assert 글머리 and 색값.startswith("#") and len(색값) == 7
+        본색.add(색값)
+    assert len(본색) == len(commands.분류순서), "분류끼리 색이 겹칩니다."
+    assert theme.분류모습("없는분류")[0] == "■"
 
 
 def test_타일크기는_돌아가며_바뀐다():
@@ -153,16 +156,46 @@ def test_타일은_분류_차례로_늘어놓는다():
     assert len(늘어놓음) == len(commands.전체명령())
 
 
+# ------------------------------------------------------------------ 둥근 모서리·딱지·투명도
+def test_둥근네모는_모서리마다_점_세_개를_둔다():
+    점들 = layout.둥근네모점들(0, 0, 100, 60, 10)
+    assert len(점들) == 24  # (x, y) 열두 쌍
+    assert 점들[:4] == [10, 0, 90, 0]  # 위쪽 변은 반경만큼 들어가서 시작한다
+
+
+def test_반경은_네모_절반을_넘지_않는다():
+    """작은 타일에 큰 반경을 주면 모양이 뒤집히므로 가둔다."""
+    점들 = layout.둥근네모점들(0, 0, 20, 10, 999)
+    assert min(점들) >= 0
+    assert 점들[0] == 5  # 반경이 높이 절반(5)으로 깎였다
+
+
+def test_큰_타일은_글자_딱지_작은_타일은_점():
+    assert layout.딱지방식(96) == "글자"
+    assert layout.딱지방식(120) == "글자"
+    assert layout.딱지방식(76) == "점"
+
+
+def test_투명도는_사십에서_백_사이로_가둔다():
+    assert layout.투명도다듬기(100) == 100
+    assert layout.투명도다듬기(0) == layout.최소투명도
+    assert layout.투명도다듬기(1000) == 100
+    assert layout.투명도다듬기("85") == 85
+    assert layout.투명도다듬기("72.6") == 73  # 슬라이더는 소수로 온다
+    assert layout.투명도다듬기(None) == layout.기본설정["투명도"]
+
+
 # ------------------------------------------------------------------ 설정 저장
 def test_설정을_저장하고_다시_읽는다(tmp_path: Path):
     파일 = tmp_path / "ui.json"
-    설정 = {"자리": "하", "두께": {"하": 340}, "항상위": True, "타일크기": 120}
+    설정 = {"자리": "하", "두께": {"하": 340}, "항상위": True, "타일크기": 120, "투명도": 80}
     assert layout.설정저장(설정, 파일) is True
     읽은것 = layout.설정불러오기(파일)
     assert 읽은것["자리"] == "하"
     assert 읽은것["두께"]["하"] == 340
     assert 읽은것["항상위"] is True
     assert 읽은것["타일크기"] == 120
+    assert 읽은것["투명도"] == 80
 
 
 def test_설정_파일이_없으면_기본값(tmp_path: Path):
@@ -181,7 +214,7 @@ def test_엉뚱한_값은_걸러낸다(tmp_path: Path):
     파일 = tmp_path / "ui.json"
     파일.write_text(
         json.dumps(
-            {"자리": "가운데", "두께": {"우": "많이", "없는자리": 10}, "타일크기": 7},
+            {"자리": "가운데", "두께": {"우": "많이", "없는자리": 10}, "타일크기": 7, "투명도": "훤함"},
             ensure_ascii=False,
         ),
         encoding="utf-8",
@@ -191,6 +224,7 @@ def test_엉뚱한_값은_걸러낸다(tmp_path: Path):
     assert 읽은것["두께"]["우"] == layout.기본설정["두께"]["우"]
     assert "없는자리" not in 읽은것["두께"]
     assert 읽은것["타일크기"] == layout.기본설정["타일크기"]
+    assert 읽은것["투명도"] == layout.기본설정["투명도"]
 
 
 def test_저장_폴더가_없으면_만든다(tmp_path: Path):
@@ -210,15 +244,34 @@ def test_화면_코드는_문법이_올바르다():
     assert _앱나무() is not None
 
 
-def test_화면이_부르는_배치함수는_모두_있다():
-    """`layout.없는이름()` 같은 오타를 잡는다."""
-    쓰인이름 = {
+def _쓰인이름(나무: ast.Module, 묶음이름: str) -> set[str]:
+    return {
         마디.attr
-        for 마디 in ast.walk(_앱나무())
+        for 마디 in ast.walk(나무)
         if isinstance(마디, ast.Attribute)
         and isinstance(마디.value, ast.Name)
-        and 마디.value.id == "layout"
+        and 마디.value.id == 묶음이름
     }
-    assert 쓰인이름, "화면이 배치 계산을 쓰지 않습니다."
-    없는것 = sorted(이름 for 이름 in 쓰인이름 if not hasattr(layout, 이름))
+
+
+def test_화면이_부르는_배치함수는_모두_있다():
+    """`layout.없는이름()` 같은 오타를 잡는다."""
+    이름들 = _쓰인이름(_앱나무(), "layout")
+    assert 이름들, "화면이 배치 계산을 쓰지 않습니다."
+    없는것 = sorted(이름 for 이름 in 이름들 if not hasattr(layout, 이름))
     assert not 없는것, f"layout 에 없는 이름을 씁니다: {없는것}"
+
+
+def test_화면이_쓰는_색_이름은_모두_있다():
+    이름들 = _쓰인이름(_앱나무(), "theme")
+    assert 이름들, "화면이 배색을 쓰지 않습니다."
+    없는것 = sorted(이름 for 이름 in 이름들 if not hasattr(theme, 이름))
+    assert not 없는것, f"theme 에 없는 이름을 씁니다: {없는것}"
+
+
+def test_직접_그린_위젯도_없는_계산을_부르지_않는다():
+    위젯파일 = Path(__file__).resolve().parent.parent / "hwpkit" / "ui" / "widgets.py"
+    나무 = ast.parse(위젯파일.read_text(encoding="utf-8"))
+    for 묶음, 뭉치 in (("layout", layout), ("theme", theme)):
+        없는것 = sorted(이름 for 이름 in _쓰인이름(나무, 묶음) if not hasattr(뭉치, 이름))
+        assert not 없는것, f"{묶음} 에 없는 이름을 씁니다: {없는것}"
