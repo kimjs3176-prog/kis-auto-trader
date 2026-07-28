@@ -33,7 +33,7 @@ from typing import Any, Callable
 from .. import commands
 from ..core.connection import 사용가능, 한글연결
 from ..core.document import 문서
-from ..core.errors import 한글오류
+from ..core.errors import 오류풀이, 한글오류
 from . import layout, theme
 from .widgets import 켬끔, 둥근칸, 미끄럼자, 바퀴묶기, 알약단추, 타일
 
@@ -42,16 +42,17 @@ __all__ = ["실행하기", "본창"]
 _제목 = "한글 문서 도우미"
 _자리글 = "기능 검색 (예: 표, 콤마, PDF)"
 
-#: 상·하 패널에서 실행판을 볼 때 최소한 이만큼은 높아야 입력칸이 눌리지 않는다.
-_실행판최소두께 = 420
-
-
 class 스크롤틀(tk.Frame):
     """세로로 구르는 상자. 안쪽 `내용` 프레임에 위젯을 넣는다."""
 
     def __init__(self, 부모: tk.Misc, 바탕색: str = theme.바탕) -> None:
         super().__init__(부모, bg=바탕색)
-        self.캔버스 = tk.Canvas(self, bg=바탕색, highlightthickness=0, bd=0)
+        # 캔버스 기본 크기(265픽셀)를 그대로 두면 grid 에서 그만큼 자리를 먼저
+        # 차지해 버려, 몫(weight)을 아무리 줘도 다른 칸이 밀린다. 작게 요청하고
+        # 남는 자리는 sticky·weight 로 받는다.
+        self.캔버스 = tk.Canvas(
+            self, bg=바탕색, highlightthickness=0, bd=0, height=60, width=60
+        )
         self.띠 = ttk.Scrollbar(self, orient="vertical", command=self.캔버스.yview)
         self.캔버스.configure(yscrollcommand=self.띠.set)
         self.캔버스.pack(side="left", fill="both", expand=True)
@@ -112,7 +113,6 @@ class 본창(tk.Tk):
         self._보이는명령: list[commands.명령] = []
         self._칸 = 1
         self._칩줄: list[list[int]] | None = None
-        self._펼친두께: int | None = None
         self._자리글보임 = True
         self._기본상태 = "준비"
 
@@ -249,6 +249,8 @@ class 본창(tk.Tk):
             self._도움말묶기(단추, f"패널을 화면 {이름}쪽에 붙입니다.")
             self._자리단추[이름] = 단추
 
+        self.이름틀.pack(fill="x")
+
         # (2) 검색칸
         self.검색틀 = 둥근칸(self.머리, 높이=36)
         self.검색값 = tk.StringVar(value=_자리글)
@@ -277,8 +279,11 @@ class 본창(tk.Tk):
         )
         self._지움표.bind("<Button-1>", lambda _사건: self._검색지우기())
 
+        self.검색틀.pack(fill="x", pady=(8, 0))
+
         # (3) 도구 — 타일 크기 · 항상 위 · 투명도
         self.도구틀 = tk.Frame(self.머리, bg=theme.바탕)
+        self.도구틀.pack(fill="x", pady=(8, 0))
         self.칸단추 = 알약단추(
             self.도구틀, self._칸이름(), 누름=self._타일크기바꾸기, 높이=26, 안여백=10
         )
@@ -345,10 +350,18 @@ class 본창(tk.Tk):
         self.격자안 = self.격자틀.내용
 
     def _실행판만들기(self) -> None:
+        """실행판 — 머리 / 설명 / 입력칸 / 실행 단추 / 결과칸.
+
+        칸 몫은 grid 로 나눈다. 입력칸이 짧은 기능이 대부분이라 pack 으로 두면
+        가운데가 텅 비고 결과만 아래에 눌려 있었다. 결과 쪽에 더 큰 몫을 준다.
+        """
         self.실행판 = tk.Frame(self.가운데, bg=theme.바탕)
+        self.실행판.grid_columnconfigure(0, weight=1)
+        self.실행판.grid_rowconfigure(2, weight=2, minsize=90)  # 입력칸
+        self.실행판.grid_rowconfigure(4, weight=5, minsize=170)  # 결과칸
 
         머리 = tk.Frame(self.실행판, bg=theme.바탕)
-        머리.pack(fill="x", padx=12, pady=(6, 4))
+        머리.grid(row=0, column=0, sticky="ew", padx=12, pady=(6, 4))
         알약단추(머리, "← 목록", 누름=self._목록으로, 높이=26, 안여백=10).pack(side="left")
         self.기능제목 = tk.Label(
             머리,
@@ -370,14 +383,36 @@ class 본창(tk.Tk):
             wraplength=340,
             font=(theme.글꼴, 9),
         )
-        self.기능설명.pack(fill="x", padx=14)
+        self.기능설명.grid(row=1, column=0, sticky="ew", padx=14)
         self.실행판.bind("<Configure>", self._설명줄맞춤)
 
-        # 실행 단추와 결과칸을 먼저 아래에 붙인다. 패널이 낮은 상·하 자리에서도
-        # 이 둘은 잘리지 않고, 남는 자리만 입력칸이 차지하도록.
+        self.입력스크롤 = 스크롤틀(self.실행판, theme.바탕)
+        self.입력스크롤.grid(row=2, column=0, sticky="nsew", padx=8, pady=4)
+        self.입력틀 = self.입력스크롤.내용
+
+        단추줄 = tk.Frame(self.실행판, bg=theme.바탕)
+        단추줄.grid(row=3, column=0, sticky="ew", padx=12)
+        self.실행단추 = ttk.Button(
+            단추줄, text="실행", style="주.TButton", command=self._실행
+        )
+        self.실행단추.pack(side="right")
+        self.결과지움 = 알약단추(
+            단추줄, "결과 지우기", 누름=lambda: self._결과쓰기(""), 높이=26, 안여백=10
+        )
+        self.결과지움.pack(side="left")
+
+        결과틀 = tk.Frame(self.실행판, bg=theme.바탕)
+        결과틀.grid(row=4, column=0, sticky="nsew", padx=12, pady=(6, 8))
+        tk.Label(
+            결과틀, text="결과", bg=theme.바탕, fg=theme.흐린글, font=(theme.글꼴, 9)
+        ).pack(anchor="w", pady=(0, 3))
+        결과상자 = tk.Frame(결과틀, bg=theme.바탕)
+        결과상자.pack(fill="both", expand=True)
+        결과띠 = ttk.Scrollbar(결과상자, orient="vertical")
+        결과띠.pack(side="right", fill="y")
         self.결과칸 = tk.Text(
-            self.실행판,
-            height=4,
+            결과상자,
+            height=6,
             wrap="word",
             bg=theme.카드,
             fg=theme.진한글,
@@ -388,18 +423,11 @@ class 본창(tk.Tk):
             highlightbackground=theme.테두리,
             highlightcolor=theme.테두리,
             font=(theme.글꼴, 9),
+            yscrollcommand=결과띠.set,
         )
+        self.결과칸.pack(side="left", fill="both", expand=True)
+        결과띠.configure(command=self.결과칸.yview)
         self.결과칸.configure(state="disabled")
-
-        self.단추줄 = tk.Frame(self.실행판, bg=theme.바탕)
-        self.실행단추 = ttk.Button(
-            self.단추줄, text="실행", style="주.TButton", command=self._실행
-        )
-        self.실행단추.pack(side="right")
-
-        self.입력스크롤 = 스크롤틀(self.실행판, theme.바탕)
-        self.입력틀 = self.입력스크롤.내용
-        self._실행판모양맞춤()
 
     def _도움말묶기(self, 위젯: tk.Misc, 말: str) -> None:
         """가리키면 아래 상태줄에 설명이 나오게 한다. (풍선 도움말 대신)"""
@@ -407,48 +435,10 @@ class 본창(tk.Tk):
         위젯.bind("<Leave>", lambda _사건: self.상태값.set(self._기본상태), add="+")
 
     # ------------------------------------------------------------------ 자리
-    def _머리모양맞춤(self) -> None:
-        """좁은 좌·우 패널은 세 줄로, 넓은 상·하 패널은 한 줄로 머리를 짠다."""
-        for 하나 in (self.이름틀, self.검색틀, self.도구틀):
-            하나.pack_forget()
-        if self.자리 in layout.가로자리:
-            self.이름틀.pack(side="left")
-            self.도구틀.pack(side="right", padx=(12, 0))
-            self.검색틀.pack(side="left", fill="x", expand=True, padx=14)
-        else:
-            self.이름틀.pack(fill="x")
-            self.검색틀.pack(fill="x", pady=(8, 0))
-            self.도구틀.pack(fill="x", pady=(8, 0))
-
-    def _실행판모양맞춤(self) -> None:
-        """붙인 자리에 따라 실행판 안을 다시 짠다.
-
-        길쭉한 좌·우 패널은 위에서 아래로(입력 → 실행 → 결과), 넓적한 상·하
-        패널은 높이가 모자라므로 결과를 오른쪽으로 보내 가로를 쓴다.
-        """
-        for 하나 in (self.결과칸, self.단추줄, self.입력스크롤):
-            하나.pack_forget()
-        if self.자리 in layout.가로자리:
-            self.결과칸.configure(width=44, height=6)
-            self.결과칸.pack(side="right", fill="y", padx=(6, 12), pady=(0, 8))
-            self.단추줄.pack(side="bottom", fill="x", padx=12, pady=(0, 8))
-            self.입력스크롤.pack(side="left", fill="both", expand=True, padx=8, pady=4)
-        else:
-            self.결과칸.configure(width=1, height=4)
-            self.결과칸.pack(side="bottom", fill="x", padx=12, pady=(6, 8))
-            self.단추줄.pack(side="bottom", fill="x", padx=12)
-            self.입력스크롤.pack(fill="both", expand=True, padx=8, pady=4)
-
     def _자리적용(self) -> None:
         두께 = self.설정["두께"].get(self.자리, layout.기본설정["두께"][self.자리])
-        self._펼친두께 = None
         self._자리잡기(두께)
-        self._머리모양맞춤()
-        self._실행판모양맞춤()
-        if self.자리 in layout.세로자리:
-            self.minsize(layout.최소두께, 340)
-        else:
-            self.minsize(900, layout.최소두께)
+        self.minsize(layout.최소두께, 340)
         self._항상위적용()
         self._투명도적용()
 
@@ -471,37 +461,18 @@ class 본창(tk.Tk):
         self.상태값.set(self._기본상태)
 
     def _지금두께(self) -> int:
-        return self.winfo_width() if self.자리 in layout.세로자리 else self.winfo_height()
+        return self.winfo_width()  # 좌·우 패널이므로 두께는 곧 너비
 
     def _두께기억(self) -> None:
         try:
-            if self._펼친두께 is not None:
-                두께 = self._펼친두께  # 실행판 때문에 넓힌 중이면 넓히기 전 값을 남긴다
-            else:
-                # 방금 geometry() 로 바꾼 크기는 아직 창에 반영되지 않았을 수 있다.
-                # 그대로 읽으면 되돌리기 전 크기가 저장된다.
-                self.update_idletasks()
-                두께 = self._지금두께()
+            # 방금 geometry() 로 바꾼 크기는 아직 창에 반영되지 않았을 수 있다.
+            # 그대로 읽으면 바뀌기 전 크기가 저장된다.
+            self.update_idletasks()
+            두께 = self._지금두께()
         except tk.TclError:  # pragma: no cover - 창이 이미 닫힌 경우
             return
         if 두께 and 두께 > 1:
             self.설정["두께"][self.자리] = 두께
-
-    def _판열때펼치기(self) -> None:
-        """상·하 패널이 너무 낮으면 실행판을 보는 동안만 잠깐 넓힌다."""
-        if self.자리 not in layout.가로자리 or self._펼친두께 is not None:
-            return
-        지금 = self._지금두께()
-        if 지금 >= _실행판최소두께:
-            return
-        self._펼친두께 = 지금  # 목록으로 돌아갈 때 되돌릴 값
-        self._자리잡기(_실행판최소두께)
-
-    def _판닫을때되돌리기(self) -> None:
-        if self._펼친두께 is None:
-            return
-        되돌릴것, self._펼친두께 = self._펼친두께, None
-        self._자리잡기(되돌릴것)
 
     # ------------------------------------------------------------ 항상 위·투명도
     def _항상위바꾸기(self) -> None:
@@ -589,10 +560,20 @@ class 본창(tk.Tk):
         self.분류틀.configure(height=len(줄들) * (높이 + 4))
 
     def _분류바꾸기(self, 이름: str) -> None:
+        """분류 칩을 누르면 그 분류의 첫 화면으로 되돌린다.
+
+        실행판을 보던 중이었으면 목록으로 나오고, 검색말도 지우고, 맨 위로
+        올린다. 칩을 눌렀는데 엉뚱한 기능의 입력칸이 그대로 떠 있으면
+        지금 무엇을 보고 있는지 헷갈린다.
+        """
         self.분류 = 이름
         for 칩, 값 in zip(self._칩들, ("전체", *commands.분류순서)):
             칩.고르기(값 == 이름)
+        self._자리글되돌리기()
+        self.현재명령 = None
+        self.격자틀.tkraise()
         self._타일채우기()
+        self.격자틀.맨위로()
 
     def _격자너비바뀜(self, 너비: int) -> None:
         새칸 = layout.칸수(너비 - 16, self.타일크기, 사이=8)
@@ -658,14 +639,12 @@ class 본창(tk.Tk):
         self.기능설명.configure(text=설명)
         self._입력만들기(명령하나)
         self._결과쓰기("")
-        self._판열때펼치기()
         self.실행판.tkraise()
         self.입력스크롤.맨위로()
         self._기본상태 = 명령하나.제목
         self.상태값.set(self._기본상태)
 
     def _목록으로(self) -> None:
-        self._판닫을때되돌리기()
         self.격자틀.tkraise()
         self._기본상태 = f"기능 {len(self._보이는명령)}개"
         self.상태값.set(self._기본상태)
@@ -805,10 +784,9 @@ class 본창(tk.Tk):
             try:
                 결과 = 명령하나.실행(맥락값)
                 말 = 결과 if isinstance(결과, str) else f"{명령하나.제목} 완료"
-            except 한글오류 as 오류:
-                말 = f"[안내] {오류.메시지}\n{오류.도움말}".strip()
             except Exception as 오류:  # noqa: BLE001
-                말 = f"[오류] {오류}"
+                # 한/글이 돌려준 COM 오류 번호까지 한국말로 풀어 준다.
+                말 = 오류풀이(오류)
             # tkinter 는 다른 스레드에서 건드리면 안 된다. 결과도 알림과 같이
             # 큐에 넣고, 주 스레드(`_큐확인`)가 꺼내어 화면에 쓴다.
             self._끝큐.put((명령하나, 말))

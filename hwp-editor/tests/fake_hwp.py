@@ -5,6 +5,11 @@
 
 완전한 한/글 흉내가 목표가 아니라, 이 프로그램이 **어떤 액션에 어떤 값을 넘기는지**
 확인하는 것이 목적이다.
+
+인수 개수는 **실제 한/글 API 와 똑같이** 적어 둔다(기본값을 두지 않는다).
+늦은 바인딩(`Dispatch`)에서는 생략 가능 인수를 파이썬이 채워 주지 않아,
+하나라도 빠뜨리면 한/글이 "매개 변수의 개수가 잘못되었습니다"(0x8002000E) 로
+거절한다. 대역이 느슨하면 그 실수가 윈도우에 가서야 드러난다.
 """
 
 from __future__ import annotations
@@ -269,7 +274,17 @@ class 가짜한글:
             self.셀주소[다음번호] = self._주소만들기(열수 + 1, 행)
             다음번호 += 1
 
-    def InsertPicture(self, 경로: str, *_인자) -> bool:
+    def InsertPicture(
+        self,
+        경로: str,
+        _포함,
+        _크기옵션,
+        _뒤집기,
+        _워터마크,
+        _효과,
+        _너비,
+        _높이,
+    ) -> bool:
         self.넣은그림.append((경로, self.현재목록))
         if self.셀값 and self.CellShape:
             self.셀값[self.현재목록] = f"[그림:{경로}]"
@@ -309,14 +324,16 @@ class 가짜한글:
         self.현재목록 = int(자리.Item("List") or 0)
         return True
 
-    def MovePos(self, _코드: int) -> bool:
+    def MovePos(self, _코드: int, _문단, _위치) -> bool:
         return True
 
     def KeyIndicator(self):
         주소 = self.셀주소.get(self.현재목록, "A1")
         return (0, 0, 0, 0, 0, 0, f"({주소})")
 
-    def InitScan(self, *_인자) -> bool:
+    def InitScan(
+        self, _옵션, _범위, _시작문단, _시작위치, _끝문단, _끝위치
+    ) -> bool:
         self._스캔남음 = True
         return True
 
@@ -336,7 +353,7 @@ class 가짜한글:
     def GetFieldList(self, _번호: int, _옵션: int) -> str:
         return "\x02".join(self.필드이름)
 
-    def Open(self, 경로: str, _형식: str = "", _옵션: str = "") -> bool:
+    def Open(self, 경로: str, _형식: str, _옵션: str) -> bool:
         self.열린파일 = 경로
         return True
 
@@ -344,7 +361,7 @@ class 가짜한글:
         self.저장기록.append((self.열린파일, "HWP"))
         return True
 
-    def SaveAs(self, 경로: str, 형식: str = "HWP", _옵션: str = "") -> bool:
+    def SaveAs(self, 경로: str, 형식: str, _옵션: str) -> bool:
         self.저장기록.append((경로, 형식))
         return True
 

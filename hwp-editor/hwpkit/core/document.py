@@ -220,7 +220,8 @@ class 문서:
     def _스캔텍스트(self, 선택만: bool) -> str:
         한글 = self.한글
         조각: list[str] = []
-        한글.InitScan(1 if 선택만 else 0, 255)
+        # InitScan(option, Range, spara, spos, epara, epos) — 여섯 개를 다 준다.
+        한글.InitScan(1 if 선택만 else 0, 255, 0, 0, -1, -1)
         try:
             while True:
                 상태, 텍스트 = 한글.GetText()
@@ -262,7 +263,10 @@ class 문서:
         코드 = 이동.get(이름)
         if 코드 is None:
             raise 입력오류(f"모르는 이동 위치: {이름}")
-        self.한글.MovePos(코드)
+        # 늦은 바인딩에서는 생략 가능 인수를 파이썬이 채워 주지 않는다.
+        # MovePos(moveID, Para, pos) 를 하나만 주고 부르면 한/글이
+        # "매개 변수의 개수가 잘못되었습니다"(0x8002000E) 로 거절한다.
+        self.한글.MovePos(코드, 0, 0)
 
     # ----------------------------------------------------------------- 표
     @property
@@ -375,13 +379,14 @@ class 문서:
     def 사진넣기(self, 경로: str, 셀맞춤: bool = True) -> None:
         """현재 위치(또는 선택한 셀)에 그림을 넣는다.
 
-        InsertPicture 인자는 (경로, 문서에포함, 크기옵션, 뒤집기, 워터마크, 효과) 다.
+        InsertPicture 인자는 (경로, 문서에포함, 크기옵션, 뒤집기, 워터마크, 효과,
+        너비, 높이) 여덟 개다. 늦은 바인딩에서는 뒤쪽을 생략할 수 없다.
         크기옵션 3 = 셀 크기에 맞춤 — 사진 대장을 만들 때 필요하다.
         """
         경로 = os.path.abspath(경로)
         if not os.path.isfile(경로):
             raise 입력오류(f"그림 파일이 없습니다: {경로}")
-        self.한글.InsertPicture(경로, 1, 3 if 셀맞춤 else 0, 0, 0, 0)
+        self.한글.InsertPicture(경로, 1, 3 if 셀맞춤 else 0, 0, 0, 0, 0, 0)
         self._편집수 += 1
         self.실행("ParagraphShapeAlignCenter")
 

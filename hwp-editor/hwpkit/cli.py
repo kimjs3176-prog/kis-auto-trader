@@ -23,7 +23,7 @@ import sys
 from . import commands
 from .core.connection import 사용가능, 한글연결
 from .core.document import 문서
-from .core.errors import 한글오류
+from .core.errors import 오류풀이, 한글오류
 
 __all__ = ["주실행"]
 
@@ -152,10 +152,8 @@ def _실행하기(번호: str, 값들: dict[str, str]) -> int:
     )
     try:
         결과 = 하나.실행(맥락값)
-    except 한글오류 as 오류:
-        print(f"[안내] {오류.메시지}")
-        if 오류.도움말:
-            print(오류.도움말)
+    except Exception as 오류:  # noqa: BLE001
+        print(오류풀이(오류))
         return 1
     print(결과 if isinstance(결과, str) else f"{하나.제목} 완료")
     return 0
