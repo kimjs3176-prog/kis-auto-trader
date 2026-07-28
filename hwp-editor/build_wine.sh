@@ -7,33 +7,39 @@
 #
 #  준비물: wine64, curl, tar  (sudo apt-get install -y --no-install-recommends wine64)
 #  사용법: bash build_wine.sh   →  dist_wine/한글문서도우미.exe
+#
+#  변수 이름은 반드시 영문으로 씁니다. bash 는 한글 변수 이름을 변수로 보지 않고
+#  명령으로 실행하려 들어 "command not found" 로 죽습니다. (설명·메시지는 한글)
 # ============================================================
 set -euo pipefail
 
-여기="$(cd "$(dirname "$0")" && pwd)"
-작업="${HWPKIT_WINE_WORK:-/tmp/hwpkit-wine}"
-파이썬버전="3.11.9"
-빌드날짜="20240415"   # python-build-standalone 릴리스 태그
-받을주소="https://github.com/astral-sh/python-build-standalone/releases/download/${빌드날짜}/cpython-${파이썬버전}+${빌드날짜}-x86_64-pc-windows-msvc-install_only.tar.gz"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+WORK="${HWPKIT_WINE_WORK:-/tmp/hwpkit-wine}"
+PYVER="3.11.9"
+PBS_TAG="20240415" # python-build-standalone 릴리스 태그
+PBS_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_TAG}/cpython-${PYVER}+${PBS_TAG}-x86_64-pc-windows-msvc-install_only.tar.gz"
 
-command -v wine64 >/dev/null 2>&1 || WINE=/usr/lib/wine/wine64
-WINE="${WINE:-$(command -v wine64)}"
-[ -x "$WINE" ] || { echo "wine64 를 찾을 수 없습니다. apt-get install wine64 로 설치하세요."; exit 1; }
+WINE="${WINE:-$(command -v wine64 || true)}"
+[ -n "$WINE" ] || WINE=/usr/lib/wine/wine64
+[ -x "$WINE" ] || {
+  echo "wine64 를 찾을 수 없습니다. apt-get install -y --no-install-recommends wine64 로 설치하세요."
+  exit 1
+}
 
-mkdir -p "$작업"
-cd "$작업"
+mkdir -p "$WORK"
+cd "$WORK"
 
 # 1) tkinter 가 포함된 윈도우 CPython 내려받기 (nuget 의 python 패키지에는 tkinter 가 없다)
 if [ ! -x python/python.exe ]; then
-  echo "[1/4] 윈도우 CPython ${파이썬버전} 내려받기"
-  curl -sSL --max-time 600 -o pbs.tar.gz "$받을주소"
+  echo "[1/4] 윈도우 CPython ${PYVER} 내려받기"
+  curl -sSL --max-time 900 -o pbs.tar.gz "$PBS_URL"
   tar xzf pbs.tar.gz
 fi
 
-export WINEPREFIX="$작업/wineprefix"
+export WINEPREFIX="$WORK/wineprefix"
 export WINEDEBUG=-all
 export WINEDLLOVERRIDES="mscoree,mshtml="
-export PYTHONLEGACYWINDOWSSTDIO=1   # Wine 에서 표준출력 초기화 오류 방지
+export PYTHONLEGACYWINDOWSSTDIO=1 # Wine 에서 표준출력 초기화 오류 방지
 export PYTHONUTF8=1
 mkdir -p "$WINEPREFIX"
 
@@ -46,18 +52,22 @@ echo "[2/4] PyInstaller·pywin32·openpyxl 설치"
 #    ASCII 경로에서 ASCII 이름으로 빌드한 뒤 마지막에 이름을 되돌린다.
 echo "[3/4] 빌드"
 rm -rf src && mkdir -p src
-tar -C "$여기" --exclude=.venv --exclude=build --exclude=dist --exclude=__pycache__ \
-    --exclude=.pytest_cache -cf - . | tar -C src -xf -
+tar -C "$HERE" --exclude=.venv --exclude=build --exclude=dist --exclude=dist_wine \
+  --exclude=__pycache__ --exclude=.pytest_cache -cf - . | tar -C src -xf -
 sed -i 's/이름 = "한글문서도우미"/이름 = "HwpKit"/' src/hwpkit.spec
-( cd src && "$WINE" ../python/python.exe -m PyInstaller --noconfirm --clean --log-level WARN hwpkit.spec )
+# 출력은 반드시 **파이프**로 넘긴다. 로그를 파일로 바로 받으면(`> build.log`)
+# Wine 의 파이썬이 그 핸들을 열지 못해 다음과 같이 죽는다.
+#   Fatal Python error: init_sys_streams: can't initialize sys standard streams
+#   OSError: [WinError 6] Invalid handle
+(cd src && "$WINE" ../python/python.exe -m PyInstaller --noconfirm --clean --log-level WARN hwpkit.spec 2>&1) | cat
 
 # 4) 결과물 정리
 echo "[4/4] 결과물 정리"
-mkdir -p "$여기/dist_wine"
-cp src/dist/HwpKit.exe "$여기/dist_wine/한글문서도우미.exe"
-cd "$여기/dist_wine"
+mkdir -p "$HERE/dist_wine"
+cp src/dist/HwpKit.exe "$HERE/dist_wine/한글문서도우미.exe"
+cd "$HERE/dist_wine"
 echo
-echo "완료: $여기/dist_wine/한글문서도우미.exe"
+echo "완료: $HERE/dist_wine/한글문서도우미.exe"
 file 한글문서도우미.exe
 sha256sum 한글문서도우미.exe
 echo

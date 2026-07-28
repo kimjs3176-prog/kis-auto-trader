@@ -186,7 +186,124 @@ def test_배치파일_식별자는_ASCII다():
                 assert 라벨.isascii(), f"{이름}: 라벨에 한글 — {라벨}"
 
 
+def test_쉘스크립트_문법이_맞다():
+    """`bash -n` 으로 훑어 본다. (bash 가 없는 환경에서는 건너뛴다)"""
+    import shutil
+    import subprocess
+
+    배시 = shutil.which("bash")
+    if not 배시:  # pragma: no cover - 윈도우에서 시험할 때
+        return
+    끝남 = subprocess.run(
+        [배시, "-n", str(뿌리 / "build_wine.sh")], capture_output=True, text=True
+    )
+    assert 끝남.returncode == 0, 끝남.stderr
+
+
+def test_쉘스크립트_변수이름은_ASCII다():
+    """bash 는 한글 변수 이름을 변수로 보지 않는다.
+
+    `여기="$(pwd)"` 라고 쓰면 대입이 아니라 **명령**으로 읽어
+    `command not found` 로 죽는다. 문법 검사(`bash -n`)로는 잡히지 않아서
+    (명령어로는 멀쩡한 줄이므로) 여기서 따로 본다.
+    """
+    import re
+
+    대입 = re.compile(r"^\s*(?:export\s+)?([^\s=#|&;()<>]+)=")
+    성한이름 = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    본문 = _읽기("build_wine.sh")
+    이어짐 = False  # 앞 줄이 `\` 로 이어지면 그 줄은 명령의 일부(--exclude=… 따위)
+    for 번호, 줄 in enumerate(본문.splitlines(), 1):
+        앞줄이어짐, 이어짐 = 이어짐, 줄.rstrip().endswith("\\")
+        맞음 = 대입.match(줄)
+        if 앞줄이어짐 or not 맞음:
+            continue
+        이름 = 맞음.group(1)
+        if 이름.startswith("-"):  # 명령 옵션
+            continue
+        assert 성한이름.match(이름), f"build_wine.sh {번호}줄: 변수 이름이 성하지 않음 — {이름}"
+
+
+def test_빌드에_필요한_파일이_모두_저장소에_들어_있다():
+    """`.gitignore` 에 걸려 빌드 파일이 통째로 빠지는 일을 막는다.
+
+    실제로 `*.spec` 규칙 때문에 `hwpkit.spec` 이 커밋되지 않아, 내려받은 사람은
+    `build_win.bat` 을 눌러도 빌드가 되지 않는 상태였다. 파일이 눈앞에 있어도
+    저장소에 없을 수 있으므로 `git ls-files` 로 확인한다.
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("git") or not (뿌리.parent / ".git").exists():
+        return  # pragma: no cover - 저장소 밖에서 풀어 쓸 때
+
+    난것 = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=뿌리, capture_output=True
+    )
+    if 난것.returncode != 0:  # pragma: no cover
+        return
+    추적중 = {하나.decode() for 하나 in 난것.stdout.split(b"\0") if 하나}
+    필요한것 = (
+        "hwpkit.spec",
+        "build_win.bat",
+        "sign_win.bat",
+        "build_wine.sh",
+        "version_info.txt",
+        "assets/hwpkit.ico",
+        "run.py",
+        "requirements.txt",
+        "배포안내.md",
+        "README.md",
+    )
+    빠진것 = sorted(하나 for 하나 in 필요한것 if 하나 not in 추적중)
+    assert not 빠진것, f"저장소에 커밋되지 않은 빌드 파일: {빠진것}"
+
+
+def test_프리셋_자료도_모두_들어_있다():
+    """`presets/*.json` 이 빠지면 실행은 되지만 스타일·양식이 통째로 사라진다."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("git") or not (뿌리.parent / ".git").exists():
+        return  # pragma: no cover
+
+    난것 = subprocess.run(["git", "ls-files", "-z"], cwd=뿌리, capture_output=True)
+    if 난것.returncode != 0:  # pragma: no cover
+        return
+    추적중 = {하나.decode() for 하나 in 난것.stdout.split(b"\0") if 하나}
+    for 하나 in sorted((뿌리 / "hwpkit" / "presets").glob("*.json")):
+        상대 = str(하나.relative_to(뿌리))
+        assert 상대 in 추적중, f"프리셋이 커밋되지 않았습니다: {상대}"
+
+
 def test_배포안내_문서가_있다():
     본문 = _읽기("배포안내.md")
-    for 낱말 in ("SmartScreen", "코드 서명", "Unblock-File", "HWPKIT_ONEDIR", "signtool"):
+    for 낱말 in (
+        "SmartScreen",
+        "코드 서명",
+        "Unblock-File",
+        "HWPKIT_ONEDIR",
+        "signtool",
+        "build_wine.sh",  # 윈도우 PC 가 없을 때의 길
+    ):
         assert 낱말 in 본문, f"배포안내에 '{낱말}' 설명이 빠졌습니다"
+
+
+def test_문서에_적힌_시험_개수가_실제와_같다(request):
+    """시험을 늘려 놓고 문서의 숫자를 안 고치는 일을 막는다.
+
+    개수는 pytest 가 실제로 모은 수를 쓴다(파일에서 `def test_` 를 세면
+    매개변수를 붙인 시험이 빠진다). 일부만 골라 돌릴 때는 건너뛴다.
+    """
+    import re
+
+    실제 = request.session.testscollected
+    if 실제 < 100:  # 전체를 돌린 것이 아니면 견줄 수 없다
+        return
+    for 이름 in ("README.md", "배포안내.md"):
+        본문 = _읽기(이름)
+        적힌것 = {int(하나) for 하나 in re.findall(r"시험 (\d+)개", 본문)}
+        적힌것 |= {int(하나) for 하나 in re.findall(r"테스트 (\d+)개", 본문)}
+        적힌것 |= {int(하나) for 하나 in re.findall(r"(\d+) passed", 본문)}
+        틀린것 = sorted(하나 for 하나 in 적힌것 if 하나 != 실제)
+        assert not 틀린것, f"{이름} 의 시험 개수 {틀린것} 이 실제({실제})와 다릅니다"
