@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 
 from hwpkit import commands
-from hwpkit.ui import layout, theme
+from hwpkit.ui import icons, layout, theme
 
 화면너비, 화면높이 = 1920, 1080
 
@@ -333,6 +333,23 @@ def test_화면이_쓰는_색_이름은_모두_있다():
 def test_직접_그린_위젯도_없는_계산을_부르지_않는다():
     위젯파일 = Path(__file__).resolve().parent.parent / "hwpkit" / "ui" / "widgets.py"
     나무 = ast.parse(위젯파일.read_text(encoding="utf-8"))
-    for 묶음, 뭉치 in (("layout", layout), ("theme", theme)):
+    for 묶음, 뭉치 in (("layout", layout), ("theme", theme), ("icons", icons)):
         없는것 = sorted(이름 for 이름 in _쓰인이름(나무, 묶음) if not hasattr(뭉치, 이름))
         assert not 없는것, f"{묶음} 에 없는 이름을 씁니다: {없는것}"
+
+
+# ------------------------------------------------------------------ 분류 아이콘
+def test_모든_분류에_그릴_아이콘이_있다():
+    """글자 기호(`§`) 대신 선으로 그리므로, 분류마다 그리는 법이 있어야 한다."""
+    있는것 = icons.아이콘이름들()
+    for 이름 in commands.분류순서:
+        assert icons.분류아이콘(이름) in 있는것, 이름
+
+
+def test_모르는_분류도_그릴_아이콘이_있다():
+    assert icons.분류아이콘("없는분류") in icons.아이콘이름들()
+
+
+def test_분류마다_아이콘이_겹치지_않는다():
+    아이콘들 = [icons.분류아이콘(이름) for 이름 in commands.분류순서]
+    assert len(set(아이콘들)) == len(아이콘들), "분류끼리 같은 아이콘을 씁니다."

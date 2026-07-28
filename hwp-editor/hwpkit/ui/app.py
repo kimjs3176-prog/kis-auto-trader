@@ -19,9 +19,15 @@
       `commands.입력항목` 정의만 보고 자동으로 만든다 — 기능마다 창을 따로
       만들지 않는다.
 
-배색은 토스(Toss) 앱을 참고했다(`theme.py`). 둥근 카드·알약 단추는 tkinter 기본
-위젯으로 되지 않아 캔버스에 직접 그린다(`widgets.py`). 창 자리·칸 수 같은 계산은
-`layout.py` 에 따로 두어 tkinter 없이 시험한다.
+배색·모양은 받은 시안(ProDoc Assistant)을 따랐다(`theme.py`) — 살짝 파란 바탕,
+흰 카드, 진한 남색빛 파랑 하나, **테두리 대신 옅은 파랑으로 채운 입력칸**, 옅은
+그림자로 만드는 깊이(`theme.그늘`).
+
+ttk 위젯은 clam 테마에서도 각진 칸과 네모난 화살표 단추가 그대로여서, 눈에 띄는
+것은 모두 캔버스에 직접 그린다(`widgets.py`) — 카드·칩·채운 단추·고르기 칸·
+토막 고르기·미끄럼자·시트 손잡이·돋보기. 분류 아이콘도 글자 기호 대신 선으로
+그린다(`icons.py`). 창 자리·칸 수 같은 계산은 `layout.py` 에 따로 두어 tkinter
+없이 시험한다.
 """
 
 from __future__ import annotations
@@ -37,7 +43,20 @@ from ..core.connection import 사용가능, 한글연결
 from ..core.document import 문서
 from ..core.errors import 오류풀이, 한글오류
 from . import layout, theme
-from .widgets import 켬끔, 둥근칸, 미끄럼자, 바퀴묶기, 알약단추, 타일
+from .widgets import (
+    고르는칸,
+    돋보기,
+    켬끔,
+    둥근칸,
+    둥근상자,
+    미끄럼자,
+    바퀴묶기,
+    알약단추,
+    잡이,
+    채운단추,
+    타일,
+    토막고르기,
+)
 
 __all__ = ["실행하기", "본창"]
 
@@ -135,68 +154,49 @@ class 본창(tk.Tk):
 
         스타일.configure("TFrame", background=theme.바탕)
         스타일.configure("TLabel", background=theme.바탕, foreground=theme.진한글)
+        # 입력칸은 테두리로 가두지 않고 **옅은 파랑으로 채운다**(시안 방식).
         스타일.configure(
             "TEntry",
-            fieldbackground=theme.카드,
-            bordercolor=theme.테두리,
-            lightcolor=theme.테두리,
-            darkcolor=theme.테두리,
-            borderwidth=1,
-            padding=6,
-        )
-        스타일.configure(
-            "TCombobox",
-            fieldbackground=theme.카드,
-            background=theme.카드,
-            bordercolor=theme.테두리,
-            lightcolor=theme.테두리,
-            darkcolor=theme.테두리,
-            arrowcolor=theme.보통글,
-            borderwidth=1,
-            padding=5,
-        )
-        스타일.map("TCombobox", fieldbackground=[("readonly", theme.카드)])
-        스타일.configure(
-            "TCheckbutton", background=theme.바탕, foreground=theme.보통글
-        )
-        # 주 단추(실행) — 토스의 파란 채움 단추
-        스타일.configure(
-            "주.TButton",
-            background=theme.파랑,
-            foreground=theme.카드,
-            bordercolor=theme.파랑,
-            lightcolor=theme.파랑,
-            darkcolor=theme.파랑,
-            focuscolor=theme.파랑,
+            fieldbackground=theme.입력칸,
+            foreground=theme.진한글,
+            bordercolor=theme.입력칸,
+            lightcolor=theme.입력칸,
+            darkcolor=theme.입력칸,
             borderwidth=0,
-            padding=(16, 7),
-            font=(theme.글꼴, 10, "bold"),
+            padding=7,
         )
-        스타일.map(
-            "주.TButton",
-            background=[("pressed", theme.파랑진하게), ("active", theme.파랑진하게), ("disabled", theme.꺼짐)],
-            lightcolor=[("disabled", theme.꺼짐)],
-            darkcolor=[("disabled", theme.꺼짐)],
-            bordercolor=[("disabled", theme.꺼짐)],
+        # 고르기 칸(드롭다운)과 단추는 ttk 로는 모서리가 각지고 화살표 단추가
+        # 네모나게 붙어 옛 프로그램처럼 보인다. 캔버스에 직접 그린다
+        # (`widgets.고르는칸` · `widgets.채운단추`).
+        # 구르는 띠 — 위아래 화살표 단추를 없애고 가늘게 만든다. 기본 clam 띠는
+        # 화살표가 붙은 굵은 막대라 이 화면에서 혼자 튄다.
+        스타일.layout(
+            "Vertical.TScrollbar",
+            [
+                (
+                    "Vertical.Scrollbar.trough",
+                    {
+                        "sticky": "ns",
+                        "children": [
+                            ("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})
+                        ],
+                    },
+                )
+            ],
         )
-        스타일.configure(
-            "곁.TButton",
-            background=theme.카드,
-            foreground=theme.보통글,
-            bordercolor=theme.테두리,
-            lightcolor=theme.테두리,
-            darkcolor=theme.테두리,
-            borderwidth=1,
-            padding=(10, 6),
-        )
-        스타일.map("곁.TButton", background=[("active", theme.파랑옅게)])
         스타일.configure(
             "Vertical.TScrollbar",
-            background=theme.테두리,
+            background=theme.섞기(theme.흐린글, theme.바탕, 0.35),
             troughcolor=theme.바탕,
             bordercolor=theme.바탕,
-            arrowcolor=theme.흐린글,
+            lightcolor=theme.바탕,
+            darkcolor=theme.바탕,
             borderwidth=0,
+            width=7,
+        )
+        스타일.map(
+            "Vertical.TScrollbar",
+            background=[("active", theme.섞기(theme.흐린글, theme.바탕, 0.6))],
         )
 
     # ------------------------------------------------------------------ 뼈대
@@ -209,6 +209,18 @@ class 본창(tk.Tk):
         골랐는지 다시 목록으로 나가야 알 수 있었다.
         """
         self._머리만들기()
+        # 상태줄을 **먼저** 아래에 붙인다. 가운데(격자+세부설정)가 요구하는 높이가
+        # 창보다 커지는 순간, 나중에 붙인 것부터 잘려 상태줄이 사라진다.
+        self.상태값 = tk.StringVar(value=self._기본상태)
+        tk.Label(
+            self,
+            textvariable=self.상태값,
+            bg=theme.바탕,
+            fg=theme.흐린글,
+            anchor="w",
+            font=(theme.글꼴, 9),
+        ).pack(side="bottom", fill="x", padx=10, pady=(2, 4))
+
         self.가운데 = tk.Frame(self, bg=theme.바탕)
         self.가운데.pack(fill="both", expand=True)
         self.가운데.grid_rowconfigure(0, weight=1)  # 타일 격자
@@ -220,50 +232,44 @@ class 본창(tk.Tk):
         self.실행판.grid(row=1, column=0, sticky="nsew")
         self.실행판.grid_remove()  # 타일을 누를 때까지 감춘다
 
-        self.상태값 = tk.StringVar(value=self._기본상태)
-        tk.Label(
-            self,
-            textvariable=self.상태값,
-            bg=theme.바탕,
-            fg=theme.흐린글,
-            anchor="w",
-            font=(theme.글꼴, 9),
-        ).pack(fill="x", padx=8, pady=(1, 3))
-
     def _머리만들기(self) -> None:
-        self.머리 = tk.Frame(self, bg=theme.바탕)
-        self.머리.pack(fill="x", padx=8, pady=(6, 0))
-
-        # (1) 이름 + 붙일 자리
-        self.이름틀 = tk.Frame(self.머리, bg=theme.바탕)
+        # (1) 앱바 — 이름표와 붙일 자리. 시안처럼 **흰 띠**로 두고 아래에 옅은
+        #     그림자를 깔아, 아래 내용이 그 밑으로 흐르는 느낌을 낸다.
+        self.앱바 = tk.Frame(self, bg=theme.카드)
+        self.앱바.pack(fill="x")
+        속앱바 = tk.Frame(self.앱바, bg=theme.카드)
+        속앱바.pack(fill="x", padx=12, pady=(9, 9))
         tk.Label(
-            self.이름틀,
+            속앱바,
             text=_제목,
-            bg=theme.바탕,
-            fg=theme.진한글,
-            font=(theme.글꼴, 12, "bold"),
+            bg=theme.카드,
+            fg=theme.파랑,  # 시안의 파란 이름표
+            font=(theme.글꼴, 13, "bold"),
         ).pack(side="left")
-        자리단추틀 = tk.Frame(self.이름틀, bg=theme.바탕)
-        자리단추틀.pack(side="right")
-        self._자리단추: dict[str, 알약단추] = {}
-        for 이름 in layout.자리들:
-            단추 = 알약단추(
-                자리단추틀,
-                이름,
-                누름=lambda 값=이름: self._자리바꾸기(값),
-                골라짐=(이름 == self.자리),
-                높이=26,
-                안여백=9,
-            )
-            단추.pack(side="left", padx=(3, 0))
-            self._도움말묶기(단추, f"패널을 화면 {이름}쪽에 붙입니다.")
-            self._자리단추[이름] = 단추
+        self._자리고르기 = 토막고르기(
+            속앱바,
+            list(layout.자리들),
+            값=self.자리,
+            바뀜=self._자리바꾸기,
+            바탕색=theme.카드,
+            높이=26,
+            안여백=10,
+        )
+        self._자리고르기.pack(side="right")
+        self._도움말묶기(self._자리고르기, "패널을 화면 왼쪽·오른쪽 중 한 곳에 붙입니다.")
+        self._앱바그늘 = tk.Canvas(
+            self, height=5, bg=theme.바탕, highlightthickness=0, bd=0
+        )
+        self._앱바그늘.pack(fill="x")
+        self._앱바그늘.bind("<Configure>", self._앱바그늘그리기)
 
-        self.이름틀.pack(fill="x")
+        self.머리 = tk.Frame(self, bg=theme.바탕)
+        self.머리.pack(fill="x", padx=8, pady=(5, 0))
 
         # (2) 검색칸
-        self.검색틀 = 둥근칸(self.머리, 높이=32)
+        self.검색틀 = 둥근칸(self.머리, 높이=34, 그늘=True)
         self.검색값 = tk.StringVar(value=_자리글)
+        돋보기(self.검색틀.속).pack(side="left", padx=(0, 7))
         self.검색칸 = tk.Entry(
             self.검색틀.속,
             textvariable=self.검색값,
@@ -289,7 +295,7 @@ class 본창(tk.Tk):
         )
         self._지움표.bind("<Button-1>", lambda _사건: self._검색지우기())
 
-        self.검색틀.pack(fill="x", pady=(5, 0))
+        self.검색틀.pack(fill="x")
 
         # (3) 도구 — 타일 크기 · 항상 위 · 투명도
         self.도구틀 = tk.Frame(self.머리, bg=theme.바탕)
@@ -366,86 +372,110 @@ class 본창(tk.Tk):
         칸 몫은 grid 로 나눈다. 입력칸이 짧은 기능이 대부분이라 pack 으로 두면
         가운데가 텅 비고 결과만 아래에 눌려 있었다. 결과 쪽에 더 큰 몫을 준다.
         """
-        self.실행판 = tk.Frame(self.가운데, bg=theme.바탕)
+        # 판 자체가 **흰 카드**다(시안). 그래서 안쪽 위젯 바탕도 모두 카드색이다.
+        self.실행판 = tk.Frame(self.가운데, bg=theme.카드)
         self.실행판.grid_columnconfigure(0, weight=1)
         # 남는 자리는 입력칸에 먼저 준다. 결과는 넘쳐도 구르면 되지만, 입력칸이
         # 짧으면 어떤 항목이 있는지 보려고 스크롤해야 해서 훨씬 불편하다.
         self.실행판.grid_rowconfigure(3, weight=4, minsize=60)  # 입력칸
         self.실행판.grid_rowconfigure(5, weight=1, minsize=104)  # 결과칸
 
-        tk.Frame(self.실행판, bg=theme.테두리, height=1).grid(
-            row=0, column=0, sticky="ew"
-        )
+        잡이(self.실행판, 바탕색=theme.바탕).grid(row=0, column=0, sticky="ew")
 
-        머리 = tk.Frame(self.실행판, bg=theme.바탕)
-        머리.grid(row=1, column=0, sticky="ew", padx=8, pady=(5, 2))
+        머리 = tk.Frame(self.실행판, bg=theme.카드)
+        머리.grid(row=1, column=0, sticky="ew", padx=12, pady=(2, 2))
         self.기능제목 = tk.Label(
             머리,
             text="",
-            bg=theme.바탕,
+            bg=theme.카드,
             fg=theme.진한글,
-            font=(theme.글꼴, 11, "bold"),
+            font=(theme.글꼴, 12, "bold"),
             anchor="w",
         )
         self.기능제목.pack(side="left", fill="x", expand=True)
-        알약단추(머리, "✕ 닫기", 누름=self._세부판닫기, 높이=24, 안여백=9).pack(
-            side="right", padx=(6, 0)
+        self.닫기표 = tk.Label(
+            머리,
+            text="✕",
+            bg=theme.카드,
+            fg=theme.보통글,
+            font=(theme.글꼴, 12),
+            cursor="hand2",
         )
+        self.닫기표.pack(side="right", padx=(6, 0))
+        self.닫기표.bind("<Button-1>", lambda _사건: self._세부판닫기())
+        self._도움말묶기(self.닫기표, "세부설정을 접습니다.")
 
         self.기능설명 = tk.Label(
             self.실행판,
             text="",
-            bg=theme.바탕,
-            fg=theme.보통글,
+            bg=theme.카드,
+            fg=theme.흐린글,
             anchor="w",
             justify="left",
             wraplength=340,
             font=(theme.글꼴, 9),
         )
-        self.기능설명.grid(row=2, column=0, sticky="ew", padx=9)
+        self.기능설명.grid(row=2, column=0, sticky="ew", padx=13)
         self.실행판.bind("<Configure>", self._설명줄맞춤)
 
-        self.입력스크롤 = 스크롤틀(self.실행판, theme.바탕)
-        self.입력스크롤.grid(row=3, column=0, sticky="nsew", padx=4, pady=(3, 2))
+        self.입력스크롤 = 스크롤틀(self.실행판, theme.카드)
+        self.입력스크롤.grid(row=3, column=0, sticky="nsew", padx=8, pady=(4, 2))
         self.입력틀 = self.입력스크롤.내용
 
-        단추줄 = tk.Frame(self.실행판, bg=theme.바탕)
-        단추줄.grid(row=4, column=0, sticky="ew", padx=8)
-        self.실행단추 = ttk.Button(
-            단추줄, text="실행", style="주.TButton", command=self._실행
+        단추줄 = tk.Frame(self.실행판, bg=theme.카드)
+        단추줄.grid(row=4, column=0, sticky="ew", padx=12, pady=(2, 0))
+        self.실행단추 = 채운단추(
+            단추줄, "실행", 누름=self._실행, 높이=38, 안여백=34, 최소너비=150, 그늘=True
         )
         self.실행단추.pack(side="right")
-        self.결과지움 = 알약단추(
-            단추줄, "결과 지우기", 누름=lambda: self._결과쓰기(""), 높이=26, 안여백=10
+        self.결과지움 = 채운단추(
+            단추줄,
+            "결과 지우기",
+            누름=lambda: self._결과쓰기(""),
+            채움=theme.파랑옅게,
+            글색=theme.파랑,
+            누른채움=theme.섞기(theme.파랑, theme.카드, 0.22),
+            높이=38,
+            안여백=18,
+            굵게=False,
         )
         self.결과지움.pack(side="left")
 
-        결과틀 = tk.Frame(self.실행판, bg=theme.바탕)
-        결과틀.grid(row=5, column=0, sticky="nsew", padx=8, pady=(4, 4))
+        결과틀 = tk.Frame(self.실행판, bg=theme.카드)
+        결과틀.grid(row=5, column=0, sticky="nsew", padx=12, pady=(6, 8))
         # '결과' 라는 라벨을 따로 두지 않는다. 머리에 기능 이름이 있고 상자가
         # 하나뿐이라 굳이 한 줄을 더 쓸 이유가 없다.
-        결과상자 = tk.Frame(결과틀, bg=theme.바탕)
-        결과상자.pack(fill="both", expand=True)
+        결과바깥 = 둥근상자(결과틀, 안색=theme.결과칸)
+        결과바깥.pack(fill="both", expand=True)
+        결과상자 = 결과바깥.속
         결과띠 = ttk.Scrollbar(결과상자, orient="vertical")
         결과띠.pack(side="right", fill="y")
         self.결과칸 = tk.Text(
             결과상자,
             height=3,
             wrap="word",
-            bg=theme.카드,
+            bg=theme.결과칸,
             fg=theme.진한글,
             relief="flat",
-            padx=8,
-            pady=6,
-            highlightthickness=1,
-            highlightbackground=theme.테두리,
-            highlightcolor=theme.테두리,
+            padx=10,
+            pady=8,
+            highlightthickness=0,
             font=(theme.글꼴, 9),
             yscrollcommand=결과띠.set,
         )
         self.결과칸.pack(side="left", fill="both", expand=True)
         결과띠.configure(command=self.결과칸.yview)
         self.결과칸.configure(state="disabled")
+
+    def _앱바그늘그리기(self, 사건: Any) -> None:
+        """앱바 아래로 번지는 옅은 그림자. (tkinter 에 투명도가 없어 줄로 긋는다)"""
+        self._앱바그늘.delete("all")
+        높이 = max(1, 사건.height)
+        for 줄 in range(높이):
+            세기 = 0.10 * (1 - 줄 / 높이)
+            self._앱바그늘.create_line(
+                0, 줄, 사건.width, 줄, fill=theme.그늘(theme.바탕, 세기)
+            )
 
     def _도움말묶기(self, 위젯: tk.Misc, 말: str) -> None:
         """가리키면 아래 상태줄에 설명이 나오게 한다. (풍선 도움말 대신)"""
@@ -471,8 +501,7 @@ class 본창(tk.Tk):
             return
         self._두께기억()
         self.자리 = 이름
-        for 값, 단추 in self._자리단추.items():
-            단추.고르기(값 == 이름)
+        self._자리고르기.고르기(이름)
         self._자리적용()
         self._칩줄 = None  # 폭이 달라졌으니 칩 줄을 다시 계산한다.
         self._기본상태 = f"패널을 {이름}쪽에 붙였습니다."
@@ -693,6 +722,9 @@ class 본창(tk.Tk):
         self._입력칸맞춤(int(가운데높이 * layout.세부판최대비))
         self.update_idletasks()
         세부판 = layout.세부판높이(self.실행판.winfo_reqheight() + 4, 가운데높이)
+        # 판이 위 한계에 걸렸으면 입력칸을 그 높이에 맞춰 다시 줄인다. 그러지 않으면
+        # 판이 요구하는 높이가 창보다 커져 아래쪽이 잘린다.
+        self._입력칸맞춤(세부판)
         격자요구 = self.격자안.winfo_reqheight() + 6
         self.가운데.grid_rowconfigure(
             0, weight=0, minsize=layout.격자칸높이(격자요구, 가운데높이, 세부판)
@@ -720,7 +752,7 @@ class 본창(tk.Tk):
             tk.Label(
                 self.입력틀,
                 text="바로 실행할 수 있습니다.",
-                bg=theme.바탕,
+                bg=theme.카드,
                 fg=theme.흐린글,
                 anchor="w",
             ).pack(fill="x", padx=5, pady=4)
@@ -728,45 +760,47 @@ class 본창(tk.Tk):
             return
 
         for 항목 in 명령하나.입력:
-            칸 = tk.Frame(self.입력틀, bg=theme.바탕)
+            칸 = tk.Frame(self.입력틀, bg=theme.카드)
             칸.pack(fill="x", padx=5, pady=(4, 0))
             if 항목.종류 == "체크":
                 # 켬/끔 알약은 좁으니 이름과 **한 줄에** 놓는다. 체크가 다섯 개인
                 # 기능(문서 정리)에서 줄 수가 절반으로 줄어 스크롤이 없어진다.
-                줄 = tk.Frame(칸, bg=theme.바탕)
+                줄 = tk.Frame(칸, bg=theme.카드)
                 줄.pack(fill="x")
                 tk.Label(
                     줄,
                     text=항목.표시,
-                    bg=theme.바탕,
+                    bg=theme.카드,
                     fg=theme.진한글,
                     anchor="w",
                     font=(theme.글꼴, 9, "bold"),
                 ).pack(side="left", fill="x", expand=True)
-                위젯 = 켬끔(줄, 켜짐=bool(항목.기본값), 높이=24, 안여백=11)
+                위젯 = 켬끔(
+                    줄, 켜짐=bool(항목.기본값), 높이=25, 안여백=12, 바탕색=theme.카드
+                )
                 위젯.pack(side="right", padx=(6, 0))
             else:
                 tk.Label(
                     칸,
                     text=항목.표시,
-                    bg=theme.바탕,
+                    bg=theme.카드,
                     fg=theme.진한글,
                     anchor="w",
                     font=(theme.글꼴, 9, "bold"),
-                ).pack(fill="x", pady=(0, 2))
+                ).pack(fill="x", pady=(0, 3))
                 위젯 = self._위젯하나(칸, 항목)
             self._입력위젯[항목.이름] = (항목, 위젯)
             if 항목.설명:
                 tk.Label(
                     칸,
                     text=항목.설명,
-                    bg=theme.바탕,
+                    bg=theme.카드,
                     fg=theme.흐린글,
                     anchor="w",
                     justify="left",
                     wraplength=320,
                     font=(theme.글꼴, 8),
-                ).pack(fill="x", pady=(2, 0))
+                ).pack(fill="x", pady=(3, 0))
         self._입력칸맞춤()
 
     def _입력칸맞춤(self, 판높이: int = 0) -> None:
@@ -781,27 +815,45 @@ class 본창(tk.Tk):
             3, weight=4, minsize=layout.입력칸높이(요구, 판높이)
         )
 
+    def _채운입력(self, 부모: tk.Misc, 값: tk.StringVar, 높이: int = 34) -> 둥근칸:
+        """옅은 파랑으로 채운 둥근 입력칸(시안 방식).
+
+        ttk 입력칸은 모서리를 깎을 수 없어, 둥근 캔버스 안에 맨 `tk.Entry` 를
+        넣는다. 테두리를 없애고 색으로만 칸을 나타낸다.
+        """
+        상자 = 둥근칸(부모, 높이=높이, 바탕색=theme.카드, 안색=theme.입력칸, 옆여백=11)
+        tk.Entry(
+            상자.속,
+            textvariable=값,
+            bg=theme.입력칸,
+            fg=theme.진한글,
+            relief="flat",
+            highlightthickness=0,
+            insertbackground=theme.진한글,
+            font=(theme.글꼴, 10),
+        ).pack(fill="both", expand=True)
+        return 상자
+
     def _위젯하나(self, 부모: tk.Frame, 항목: commands.입력항목) -> Any:
         """이름 아래에 놓는 입력칸. (체크는 `_입력만들기` 가 한 줄로 직접 만든다)"""
         if 항목.종류 == "선택":
-            값 = tk.StringVar(value=str(항목.기본값))
-            ttk.Combobox(
-                부모, textvariable=값, values=list(항목.선택지), state="readonly"
-            ).pack(fill="x")
-            return 값
+            칸 = 고르는칸(부모, list(항목.선택지), 값=str(항목.기본값))
+            칸.pack(fill="x")
+            return 칸
         if 항목.종류 == "여러줄":
+            상자 = 둥근상자(부모)
+            상자.pack(fill="both", expand=True)
             글칸 = tk.Text(
-                부모,
+                상자.속,
                 height=8,
                 wrap="word",
-                bg=theme.카드,
+                bg=theme.입력칸,
                 fg=theme.진한글,
                 relief="flat",
-                padx=8,
-                pady=6,
-                highlightthickness=1,
-                highlightbackground=theme.테두리,
-                highlightcolor=theme.파랑,
+                padx=9,
+                pady=7,
+                highlightthickness=0,
+                insertbackground=theme.진한글,
                 font=(theme.글꼴, 10),
             )
             글칸.pack(fill="both", expand=True)
@@ -810,19 +862,23 @@ class 본창(tk.Tk):
             return 글칸
         if 항목.종류 in ("파일", "폴더", "저장파일"):
             값 = tk.StringVar(value=str(항목.기본값))
-            줄 = tk.Frame(부모, bg=theme.바탕)
+            줄 = tk.Frame(부모, bg=theme.카드)
             줄.pack(fill="x")
-            ttk.Entry(줄, textvariable=값).pack(side="left", fill="x", expand=True)
-            ttk.Button(
+            self._채운입력(줄, 값).pack(side="left", fill="x", expand=True)
+            채운단추(
                 줄,
-                text="찾기",
-                style="곁.TButton",
-                width=5,
-                command=lambda: self._경로고르기(항목.종류, 값),
+                "찾기",
+                누름=lambda: self._경로고르기(항목.종류, 값),
+                채움=theme.파랑옅게,
+                글색=theme.파랑,
+                누른채움=theme.섞기(theme.파랑, theme.카드, 0.22),
+                높이=34,
+                안여백=14,
+                굵게=False,
             ).pack(side="left", padx=(6, 0))
             return 값
         값 = tk.StringVar(value=str(항목.기본값))
-        ttk.Entry(부모, textvariable=값).pack(fill="x")
+        self._채운입력(부모, 값).pack(fill="x")
         return 값
 
     def _경로고르기(self, 종류: str, 값: tk.StringVar) -> None:
@@ -862,7 +918,7 @@ class 본창(tk.Tk):
             self._결과쓰기(준비오류)
             return
 
-        self.실행단추.configure(state="disabled")
+        self.실행단추.잠그기(True)
         self.상태값.set(f"{명령하나.제목} 실행 중…")
 
         def 일하기() -> None:
@@ -880,7 +936,7 @@ class 본창(tk.Tk):
         threading.Thread(target=일하기, daemon=True).start()
 
     def _실행끝(self, 명령하나: commands.명령, 말: str) -> None:
-        self.실행단추.configure(state="normal")
+        self.실행단추.잠그기(False)
         self._기본상태 = f"{명령하나.제목} 끝"
         self.상태값.set(self._기본상태)
         self._결과쓰기(말)
