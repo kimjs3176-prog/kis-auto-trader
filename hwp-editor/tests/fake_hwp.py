@@ -104,6 +104,10 @@ class 가짜HAction:
             self.한글.선택중 = False
         elif 이름 in ("TableCellBlock", "TableCellBlockExtend", "SelectAll"):
             self.한글.선택중 = True
+        elif 이름 == "MoveSelParaEnd":
+            self.한글._문단선택()
+        elif 이름 in ("MoveNextParaBegin", "MoveNextPara"):
+            self.한글._다음문단()
         elif 이름 in ("TableRightCell", "TableRightCellAppend"):
             self.한글._옆셀(1)
         elif 이름 == "TableLeftCell":
@@ -177,6 +181,7 @@ class 가짜한글:
         self.셀값: dict[int, str] = dict(셀값 or {})
         self.셀주소: dict[int, str] = dict(셀주소 or {})
         self.현재목록: int = min(self.셀값) if self.셀값 else 0
+        self.현재문단: int = 0
         self.CellShape: Any = 1 if self.셀값 else None
         self.HAction = 가짜HAction(self)
         self.HParameterSet = 가짜HParameterSet()
@@ -187,6 +192,32 @@ class 가짜한글:
         self.열린파일: str = ""
         self.등록모듈: list[tuple[str, str]] = []
         self.넣은그림: list[tuple[str, int]] = []
+
+    # -------------------------------------------------------- 문단 순회 대역
+    @property
+    def 문단들(self) -> list[str]:
+        """본문을 문단으로 나눈 것. (한/글은 문단 끝을 \\r 로 준다)"""
+        return (self.본문 or "").replace("\r\n", "\r").split("\r")
+
+    def _문단선택(self) -> None:
+        """MoveSelParaEnd — 지금 문단 끝까지 선택한다."""
+        문단 = self.문단들
+        if 0 <= self.현재문단 < len(문단):
+            self.선택값 = 문단[self.현재문단]
+            self.선택중 = bool(self.선택값)
+
+    def _다음문단(self) -> None:
+        """MoveNextParaBegin — 다음 문단으로. 마지막이면 그대로 있는다."""
+        if self.현재문단 + 1 < len(self.문단들):
+            self.현재문단 += 1
+
+    def GetPos(self):
+        return (0, self.현재문단, 0)
+
+    def SetPos(self, 목록: int, 문단: int, _위치: int) -> bool:
+        self.현재목록 = 목록
+        self.현재문단 = 문단
+        return True
 
     # ------------------------------------------------------------ 내부
     def _텍스트입력(self, 값: str) -> None:
@@ -324,7 +355,11 @@ class 가짜한글:
         self.현재목록 = int(자리.Item("List") or 0)
         return True
 
-    def MovePos(self, _코드: int, _문단, _위치) -> bool:
+    def MovePos(self, 코드: int, _문단, _위치) -> bool:
+        if 코드 == 2:  # 문서 처음
+            self.현재문단 = 0
+        elif 코드 == 3:  # 문서 끝
+            self.현재문단 = max(len(self.문단들) - 1, 0)
         return True
 
     def KeyIndicator(self):

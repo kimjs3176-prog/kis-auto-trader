@@ -665,6 +665,7 @@ class 본창(tk.Tk):
                 fg=theme.흐린글,
                 anchor="w",
             ).pack(fill="x", padx=6, pady=6)
+            self._입력칸맞춤()
             return
 
         for 항목 in 명령하나.입력:
@@ -691,6 +692,15 @@ class 본창(tk.Tk):
                     wraplength=320,
                     font=(theme.글꼴, 8),
                 ).pack(fill="x", pady=(3, 0))
+        self._입력칸맞춤()
+
+    def _입력칸맞춤(self) -> None:
+        """입력 개수에 맞춰 입력칸 높이를 잡는다. (남는 몫은 결과칸으로)"""
+        self.update_idletasks()  # 방금 만든 위젯의 요청 크기를 읽으려면 먼저 재야 한다
+        요구 = self.입력틀.winfo_reqheight() + 12
+        self.실행판.grid_rowconfigure(
+            2, weight=2, minsize=layout.입력칸높이(요구, self.winfo_height())
+        )
 
     def _위젯하나(self, 부모: tk.Frame, 항목: commands.입력항목) -> Any:
         if 항목.종류 == "선택":

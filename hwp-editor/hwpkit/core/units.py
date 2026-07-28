@@ -7,7 +7,19 @@
 
 from __future__ import annotations
 
-__all__ = ["MM당", "PT당", "mm", "pt", "hwp단위_mm", "rgb", "rgb풀기", "A4", "B4", "용지"]
+__all__ = [
+    "MM당",
+    "PT당",
+    "mm",
+    "pt",
+    "pt_mm",
+    "hwp단위_mm",
+    "rgb",
+    "rgb풀기",
+    "A4",
+    "B4",
+    "용지",
+]
 
 #: 1mm = 7200 / 25.4 HWPUNIT
 MM당 = 7200 / 25.4
@@ -23,6 +35,15 @@ def mm(값: float) -> int:
 def pt(값: float) -> int:
     """포인트를 글자 크기 단위(1/100pt)로."""
     return int(round(값 * PT당))
+
+
+def pt_mm(값: float) -> float:
+    """포인트를 밀리미터로 (1pt = 1/72 인치).
+
+    한/글 문단 여백 입력은 mm 인데, 보고서 편집 기준은 '문단위 10pt' 처럼
+    포인트로 쓰여 있어 옮겨 적을 때 이 변환이 필요하다.
+    """
+    return round(값 * 25.4 / 72, 2)
 
 
 def hwp단위_mm(값: int) -> float:
