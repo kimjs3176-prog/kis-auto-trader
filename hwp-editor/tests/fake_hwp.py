@@ -161,6 +161,45 @@ class 가짜창모음:
         return self._창
 
 
+class 가짜문서정보:
+    def __init__(self) -> None:
+        self.RedrawEnable = True
+
+
+class 가짜한문서:
+    def __init__(self) -> None:
+        self.XHwpDocumentInfo = 가짜문서정보()
+
+
+class 가짜문서모음:
+    """XHwpDocuments 대역.
+
+    문서가 하나도 없는 상태(한/글 시작 화면)를 흉내 낼 수 있다. 그 상태에서는
+    실제 한/글도 `HAction` 을 None 으로 준다.
+    """
+
+    def __init__(self, 문서수: int = 1, 소유자: Any = None) -> None:
+        self._문서 = [가짜한문서() for _ in range(max(0, 문서수))]
+        self._소유자 = 소유자
+        self.탭으로: int | None = None
+
+    @property
+    def Count(self) -> int:
+        return len(self._문서)
+
+    def Item(self, 번호: int) -> 가짜한문서:
+        return self._문서[번호]
+
+    def Add(self, 탭으로: int) -> 가짜한문서:
+        """한/글 XHwpDocuments.Add(isTab) — 인수 1개."""
+        새것 = 가짜한문서()
+        self._문서.append(새것)
+        self.탭으로 = 탭으로
+        if self._소유자 is not None:
+            self._소유자._통로열기()  # 문서가 생기면 명령을 받을 수 있게 된다
+        return 새것
+
+
 class 가짜한글:
     """한/글 COM 객체 대역."""
 
@@ -171,6 +210,7 @@ class 가짜한글:
         선택텍스트: str = "",
         셀값: dict[int, str] | None = None,
         셀주소: dict[int, str] | None = None,
+        문서수: int = 1,
     ) -> None:
         self.기록: list[tuple[str, dict]] = []          # (액션, 파라미터)
         self.실행기록: list[str] = []                    # HAction.Run
@@ -183,15 +223,26 @@ class 가짜한글:
         self.현재목록: int = min(self.셀값) if self.셀값 else 0
         self.현재문단: int = 0
         self.CellShape: Any = 1 if self.셀값 else None
-        self.HAction = 가짜HAction(self)
-        self.HParameterSet = 가짜HParameterSet()
+        self.XHwpDocuments = 가짜문서모음(문서수, 소유자=self)
         self.XHwpWindows = 가짜창모음()
+        # 문서가 하나도 없으면 실제 한/글도 명령 통로(HAction)를 주지 않는다.
+        self.HAction: Any = None
+        self.HParameterSet: Any = None
+        if 문서수 > 0:
+            self._통로열기()
         self.저장기록: list[tuple[str, str]] = []
         self.필드값: dict[str, str] = {}
         self.필드이름: list[str] = []
         self.열린파일: str = ""
         self.등록모듈: list[tuple[str, str]] = []
         self.넣은그림: list[tuple[str, int]] = []
+
+    def _통로열기(self) -> None:
+        """문서가 생겨 명령을 받을 수 있게 된 상태."""
+        if self.HAction is None:
+            self.HAction = 가짜HAction(self)
+        if self.HParameterSet is None:
+            self.HParameterSet = 가짜HParameterSet()
 
     # -------------------------------------------------------- 문단 순회 대역
     @property

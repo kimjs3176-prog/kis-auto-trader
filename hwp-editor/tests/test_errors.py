@@ -72,6 +72,7 @@ def test_COM이_아닌_예외는_종류와_함께():
     "GetFieldList": 2,  # Number, Option
     "SaveAs": 3,  # Path, Format, arg
     "Open": 3,  # Path, Format, arg
+    "Add": 1,  # XHwpDocuments.Add(isTab)
 }
 
 

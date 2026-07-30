@@ -22,8 +22,8 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 from . import units
-from .connection import 한글연결
-from .errors import 상태오류, 입력오류
+from .connection import 준비도움말, 한글연결
+from .errors import 상태오류, 연결오류, 입력오류
 
 __all__ = ["문서", "셀주소", "셀범위"]
 
@@ -117,10 +117,26 @@ class 문서:
         """이 객체를 통해 실행한 편집 횟수(되돌리기 계산에 쓴다)."""
         return self._편집수
 
+    def _받는곳(self, 이름: str) -> Any:
+        """`HAction` 처럼 명령을 받는 COM 하위 객체를 꺼낸다.
+
+        한/글이 편집할 문서 없이 시작 화면만 떠 있으면 이 값이 **None** 으로 온다.
+        그대로 쓰면 화면에 `'NoneType' object has no attribute 'Run'` 이라는 영문
+        오류만 떠서 무엇을 해야 할지 알 수 없다. 여기서 안내가 붙은 오류로 바꾼다.
+        """
+        객체 = getattr(self.한글, 이름, None)
+        if 객체 is None:
+            raise 연결오류(
+                "한/글이 명령을 받을 상태가 아닙니다.",
+                준비도움말(f"{이름} 을 받지 못했습니다."),
+            )
+        return 객체
+
     def 실행(self, 액션: str, 횟수: int = 1) -> None:
         """파라미터가 필요 없는 액션을 실행한다. (예: 'BreakPara')"""
+        받는곳 = self._받는곳("HAction")
         for _ in range(max(1, 횟수)):
-            self.한글.HAction.Run(액션)
+            받는곳.Run(액션)
         self._편집수 += max(1, 횟수)
 
     @contextlib.contextmanager
@@ -134,6 +150,11 @@ class 문서:
                 값.SetItem("Height", units.pt(15))
         """
         액션객체 = self.한글.CreateAction(액션)
+        if 액션객체 is None:
+            raise 연결오류(
+                "한/글이 명령을 받을 상태가 아닙니다.",
+                준비도움말(f"'{액션}' 액션을 만들지 못했습니다."),
+            )
         파라 = 액션객체.CreateSet()
         액션객체.GetDefault(파라)
         yield 파라
@@ -143,10 +164,11 @@ class 문서:
     @contextlib.contextmanager
     def 세트파라미터(self, 액션: str, 세트이름: str) -> Iterator[Any]:
         """`HParameterSet` 을 직접 만져야 하는 액션용. (표 만들기, 용지 설정 등)"""
-        세트 = getattr(self.한글.HParameterSet, 세트이름)
-        self.한글.HAction.GetDefault(액션, 세트.HSet)
+        세트 = getattr(self._받는곳("HParameterSet"), 세트이름)
+        받는곳 = self._받는곳("HAction")
+        받는곳.GetDefault(액션, 세트.HSet)
         yield 세트
-        self.한글.HAction.Execute(액션, 세트.HSet)
+        받는곳.Execute(액션, 세트.HSet)
         self._편집수 += 1
 
     # ------------------------------------------------------------- 문자 입력

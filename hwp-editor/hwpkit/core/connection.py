@@ -14,20 +14,34 @@
    "CoInitialize has not been called" 오류가 난다.
 4. 보안 모듈을 등록해 파일 접근 확인 창을 없앤다.
 5. 실패하면 **무엇이 왜 실패했는지** 실제 COM 오류와 함께 알려준다.
+6. **붙은 뒤에 명령을 받을 수 있는지까지 확인한다.**
+   한/글에 붙어도 문서가 하나도 없으면(시작 화면만 떠 있는 상태) `HAction` 이
+   `None` 으로 와서, 첫 명령에서 `'NoneType' object has no attribute 'Run'` 로
+   죽는다. 붙은 직후 빈 문서를 보장하고 잠깐 기다려 준다.
 """
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import logging
 import os
 import sys
 import threading
+import time
 from typing import Any
 
 from .errors import 연결오류, 환경오류
 
-__all__ = ["한글연결", "사용가능", "진단"]
+__all__ = [
+    "한글연결",
+    "사용가능",
+    "진단",
+    "받을수있나",
+    "빈문서보장",
+    "준비기다리기",
+    "준비도움말",
+]
 
 로그 = logging.getLogger(__name__)
 
@@ -39,6 +53,78 @@ _보안모듈 = ("FilePathCheckDLL", "FilePathCheckerModule")
 
 #: COM 은 스레드마다 초기화해야 하고, 연결 객체도 스레드별로 두는 편이 안전하다.
 _지역 = threading.local()
+
+#: 명령을 받는 통로. 이 중 하나라도 None 이면 아무 기능도 실행할 수 없다.
+받는곳이름 = ("HAction", "HParameterSet")
+
+#: 새로 띄운 한/글이 준비되기까지 기다리는 시간과 확인 간격(초)
+_준비대기 = 10.0
+_준비간격 = 0.3
+
+
+def 받을수있나(객체: Any) -> str:
+    """COM 객체가 명령을 받을 상태인지 본다. 괜찮으면 빈 문자열.
+
+    `HAction` 이 None 인 채로 `HAction.Run(...)` 을 부르면 화면에
+    `'NoneType' object has no attribute 'Run'` 이라는 영문 오류만 뜬다. 무엇이
+    없는지 먼저 확인해 두면 사람이 읽을 수 있는 안내로 바꿀 수 있다.
+    """
+    if 객체 is None:
+        return "연결 객체가 없습니다."
+    for 이름 in 받는곳이름:
+        try:
+            if getattr(객체, 이름, None) is None:
+                return f"한/글이 아직 명령을 받을 상태가 아닙니다({이름} 없음)."
+        except Exception as 오류:  # noqa: BLE001 - COM 은 별별 예외를 낸다
+            return f"{이름} 확인 실패: {오류}"
+    return ""
+
+
+def 빈문서보장(객체: Any) -> bool:
+    """열린 문서가 하나도 없으면 새 문서를 만든다.
+
+    한/글 시작 화면만 떠 있는 상태에 붙으면 편집할 대상이 없어 `HAction` 이
+    None 으로 온다. 이때 사용자가 손으로 새 문서를 만들 때까지 기다릴 이유가 없다.
+    """
+    try:
+        한글문서들 = 객체.XHwpDocuments
+        if 한글문서들 is None:
+            return False
+        if int(getattr(한글문서들, "Count", 0) or 0) > 0:
+            return False
+        한글문서들.Add(0)  # 인수 1개(탭으로 열지 여부) — 늦은 바인딩이라 꼭 채운다
+        로그.info("한/글에 열린 문서가 없어 새 문서를 만들었습니다.")
+        return True
+    except Exception as 오류:  # noqa: BLE001
+        로그.debug("빈 문서 만들기 실패: %s", 오류)
+        return False
+
+
+def 준비도움말(이유: str = "") -> str:
+    """'명령을 받지 못한다' 는 상황에서 사용자가 해 볼 것들."""
+    줄들 = [
+        "한/글에 편집할 문서가 열려 있는지 확인하고 다시 눌러 주세요.",
+        "  · 한/글 시작 화면만 떠 있으면 새 문서를 하나 만들어 주세요.",
+        "  · 한/글이 문서를 여는 중이면 잠시 뒤에 다시 눌러 주세요.",
+        "  · 한/글과 이 프로그램의 권한이 다르면(한쪽만 관리자) 조종하지 못합니다.",
+        "  · 계속 같으면 '도구 → 한/글 연결 진단' 결과를 알려 주세요.",
+    ]
+    if 이유:
+        줄들.append(f"\n실제 상태\n  {이유}")
+    return "\n".join(줄들)
+
+
+def 준비기다리기(객체: Any, 대기: float = _준비대기) -> str:
+    """명령을 받을 수 있을 때까지 기다린다. 끝내 안 되면 마지막 이유를 돌려준다."""
+    끝 = time.monotonic() + max(0.0, 대기)
+    이유 = 받을수있나(객체)
+    while 이유:
+        빈문서보장(객체)
+        이유 = 받을수있나(객체)
+        if not 이유 or time.monotonic() >= 끝:
+            break
+        time.sleep(_준비간격)
+    return 이유
 
 
 def 사용가능() -> tuple[bool, str]:
@@ -103,12 +189,24 @@ class 한글연결:
 
         객체 = self._실행중찾기()
         if 객체 is not None:
-            self.새로띄움 = False
-            로그.info("실행 중인 한/글에 연결했습니다.")
-        else:
+            이유 = 준비기다리기(객체)
+            if 이유:
+                # 붙기는 했지만 명령을 받지 못하는 껍데기다. 새로 띄우는 편이 낫다.
+                로그.info("실행 중인 한/글이 명령을 받지 못합니다(%s). 새로 띄웁니다.", 이유)
+                self.마지막오류 = f"실행 중인 한/글: {이유}"
+                객체 = None
+            else:
+                self.새로띄움 = False
+                로그.info("실행 중인 한/글에 연결했습니다.")
+
+        if 객체 is None:
             객체 = self._새로만들기()
             self.새로띄움 = True
             로그.info("한/글을 새로 실행했습니다.")
+            이유 = 준비기다리기(객체)
+            if 이유:
+                self.마지막오류 = 이유
+                raise 연결오류("한/글이 명령을 받을 상태가 아닙니다.", 준비도움말(이유))
 
         _지역.한글 = 객체
         if self._보안모듈등록:
@@ -366,4 +464,31 @@ def _연결시도점검() -> list[str]:
         "  보안 모듈 등록: "
         + ("성공" if 연결.보안모듈등록() else "실패(파일 접근 확인 창이 뜰 수 있음)")
     )
+    결과 += _준비점검(붙은객체)
+    return 결과
+
+
+def _준비점검(객체: Any) -> list[str]:
+    """명령을 받을 수 있는 상태인지(문서가 열려 있는지) 본다."""
+    결과 = ["", "[명령을 받을 상태인가]"]
+    try:
+        수 = getattr(객체.XHwpDocuments, "Count", "알 수 없음")
+    except Exception as 오류:  # noqa: BLE001
+        수 = f"조회 실패({오류})"
+    결과.append(f"  열린 문서: {수}개")
+
+    이유 = 받을수있나(객체)
+    if 이유 and 빈문서보장(객체):
+        결과.append("  - 열린 문서가 없어 새 문서를 만들었습니다.")
+        이유 = 받을수있나(객체)
+    for 이름 in 받는곳이름:
+        있나 = False
+        with contextlib.suppress(Exception):
+            있나 = getattr(객체, 이름, None) is not None
+        결과.append(f"  {'○' if 있나 else '×'} {이름}")
+    if 이유:
+        결과.append(f"  → {이유}")
+        결과.append("  → 한/글에 새 문서를 하나 만든 뒤 다시 해 보세요.")
+    else:
+        결과.append("  ○ 명령을 받을 수 있습니다.")
     return 결과
