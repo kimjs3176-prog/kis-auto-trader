@@ -353,3 +353,90 @@ def test_모르는_분류도_그릴_아이콘이_있다():
 def test_분류마다_아이콘이_겹치지_않는다():
     아이콘들 = [icons.분류아이콘(이름) for 이름 in commands.분류순서]
     assert len(set(아이콘들)) == len(아이콘들), "분류끼리 같은 아이콘을 씁니다."
+
+
+# ------------------------------------------------- UI 스레드에서 COM 금지
+#: 한/글 COM 을 만지는 것이 허용된 함수. (모두 작업 스레드에서 돈다)
+_COM허용함수 = {"일하기", "알아보기", "_상태확인"}
+
+_앱파일 = Path(__file__).resolve().parent.parent / "hwpkit" / "ui" / "app.py"
+
+
+def _함수별_COM사용(본문: str) -> dict[str, list[int]]:
+    """`self.문서객체.무엇…` 처럼 **속을 만지는** 곳을 찾는다.
+
+    `self.문서객체 = 문서(...)` 나 인수로 넘기는 것은 COM 을 부르지 않으므로 센다.
+    """
+    나무 = ast.parse(본문)
+    쓰는곳: dict[str, list[int]] = {}
+
+    class 훑기(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.어디: list[str] = []
+
+        def visit_FunctionDef(self, 마디: ast.FunctionDef) -> None:  # noqa: N802
+            self.어디.append(마디.name)
+            self.generic_visit(마디)
+            self.어디.pop()
+
+        def visit_Attribute(self, 마디: ast.Attribute) -> None:  # noqa: N802
+            글 = ast.unparse(마디)
+            if 글.startswith("self.문서객체.") and self.어디:
+                쓰는곳.setdefault(self.어디[-1], []).append(마디.lineno)
+            self.generic_visit(마디)
+
+    훑기().visit(나무)
+    return 쓰는곳
+
+
+def test_화면은_UI스레드에서_한글COM을_부르지_않는다():
+    """실제로 '프리즈되고 종료도 안 되는' 현상의 원인이었다.
+
+    COM 호출은 동기라서, 한/글이 새로 켜지는 중이거나 확인 창을 띄워 놓고 있으면
+    돌아오지 않는다. UI 스레드에서 부르면 그 동안 창이 멈추고 닫기(✕)도 처리되지
+    않는다. 그래서 한/글을 만지는 일은 작업 스레드에서만 한다.
+    """
+    본문 = _앱파일.read_text(encoding="utf-8")
+    쓰는곳 = _함수별_COM사용(본문)
+    assert 쓰는곳, "탐지가 헛돌고 있습니다(문서객체 사용이 하나도 안 잡혔습니다)"
+    잘못 = {
+        이름: 줄들 for 이름, 줄들 in 쓰는곳.items() if 이름 not in _COM허용함수
+    }
+    assert not 잘못, (
+        "UI 스레드에서 한/글 COM 을 부릅니다: "
+        + ", ".join(f"{이름}() {줄들}줄" for 이름, 줄들 in 잘못.items())
+    )
+
+
+def test_상태확인은_작업스레드에서_불린다():
+    """`_상태확인` 은 COM 을 쓰므로 `일하기` 안에서만 불러야 한다."""
+    본문 = _앱파일.read_text(encoding="utf-8")
+    나무 = ast.parse(본문)
+    부른곳: list[str] = []
+
+    class 훑기(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.어디: list[str] = []
+
+        def visit_FunctionDef(self, 마디: ast.FunctionDef) -> None:  # noqa: N802
+            self.어디.append(마디.name)
+            self.generic_visit(마디)
+            self.어디.pop()
+
+        def visit_Call(self, 마디: ast.Call) -> None:  # noqa: N802
+            if isinstance(마디.func, ast.Attribute) and 마디.func.attr == "_상태확인":
+                부른곳.append(self.어디[-1] if self.어디 else "(바깥)")
+            self.generic_visit(마디)
+
+    훑기().visit(나무)
+    assert 부른곳 == ["일하기"], f"부른 곳: {부른곳}"
+
+
+def test_시작할때_연결확인은_스레드에_맡긴다():
+    """창을 만들면서 한/글에 붙으면, 한/글이 꺼져 있을 때 수십 초 멈춘다."""
+    본문 = _앱파일.read_text(encoding="utf-8")
+    시작 = 본문.index("def _연결확인")
+    끝 = 본문.index("\ndef ", 시작) if "\ndef " in 본문[시작:] else len(본문)
+    몸통 = 본문[시작:끝]
+    assert "threading.Thread" in 몸통, "_연결확인 이 스레드를 쓰지 않습니다"
+    assert "연결.상태()" in 몸통, "상태만 알아보는 `상태()` 를 써야 합니다(새로 띄우지 않음)"

@@ -158,7 +158,7 @@ def test_서명스크립트_핵심옵션():
 
 def test_배치파일은_CP949_CRLF다():
     """UTF-8 로 저장하면 한국어 윈도우 cmd 에서 한글이 깨지고 조건문이 어긋난다."""
-    for 이름 in ("build_win.bat", "sign_win.bat"):
+    for 이름 in ("build_win.bat", "build_win_folder.bat", "sign_win.bat"):
         자료 = (뿌리 / 이름).read_bytes()
         자료.decode("cp949")  # 못 읽으면 예외
         assert b"\r\n" in 자료, f"{이름} 은 CRLF 줄바꿈이어야 합니다"
@@ -174,7 +174,7 @@ def test_배치파일_식별자는_ASCII다():
     """변수 이름·라벨에 한글을 쓰면 일부 윈도우 환경에서 배치가 오작동한다."""
     import re
 
-    for 이름 in ("build_win.bat", "sign_win.bat"):
+    for 이름 in ("build_win.bat", "build_win_folder.bat", "sign_win.bat"):
         본문 = _읽기(이름)
         for 줄 in 본문.splitlines():
             벗김 = 줄.strip()
@@ -246,6 +246,7 @@ def test_빌드에_필요한_파일이_모두_저장소에_들어_있다():
     필요한것 = (
         "hwpkit.spec",
         "build_win.bat",
+        "build_win_folder.bat",
         "sign_win.bat",
         "build_wine.sh",
         "version_info.txt",
@@ -307,3 +308,26 @@ def test_문서에_적힌_시험_개수가_실제와_같다(request):
         적힌것 |= {int(하나) for 하나 in re.findall(r"(\d+) passed", 본문)}
         틀린것 = sorted(하나 for 하나 in 적힌것 if 하나 != 실제)
         assert not 틀린것, f"{이름} 의 시험 개수 {틀린것} 이 실제({실제})와 다릅니다"
+
+
+def test_폴더형_빌드_길이_있다():
+    """백신 오탐이 났을 때 쓸 수 있는 길. (한 파일은 실행할 때마다 자신을 푼다)
+
+    윈도우는 `build_win_folder.bat` 을 두 번 누르면 되고, 리눅스는
+    `HWPKIT_ONEDIR=1 bash build_wine.sh` 로 만든다.
+    """
+    배치 = (뿌리 / "build_win_folder.bat").read_bytes().decode("cp949")
+    assert "HWPKIT_ONEDIR=1" in 배치
+    assert "build_win.bat" in 배치  # 시험까지 도는 본 빌드를 그대로 부른다
+
+    쉘 = _읽기("build_wine.sh")
+    assert "HWPKIT_ONEDIR" in 쉘, "리눅스 빌드에 폴더 형태 길이 없습니다"
+
+    스펙 = _읽기("hwpkit.spec")
+    assert "HWPKIT_ONEDIR" in 스펙, "spec 이 폴더 형태를 모릅니다"
+
+
+def test_배포안내가_폴더형_길을_알려준다():
+    본문 = _읽기("배포안내.md")
+    assert "build_win_folder.bat" in 본문
+    assert "HWPKIT_ONEDIR=1 bash build_wine.sh" in 본문

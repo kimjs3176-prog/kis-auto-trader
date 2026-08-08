@@ -6,7 +6,11 @@
 #  부트로더도 PyInstaller 의 윈도우 wheel 에서 나온 것이라 윈도우에서 그대로 돕니다.
 #
 #  준비물: wine64, curl, tar  (sudo apt-get install -y --no-install-recommends wine64)
-#  사용법: bash build_wine.sh   →  dist_wine/한글문서도우미.exe
+#  사용법: bash build_wine.sh              →  dist_wine/한글문서도우미.exe (한 파일)
+#          HWPKIT_ONEDIR=1 bash build_wine.sh →  dist_wine/한글문서도우미/ (폴더 형태)
+#
+#  폴더 형태는 실행할 때 임시 폴더에 자신을 풀지 않아 **백신 오탐이 훨씬 적고**
+#  시작도 빠르다. 사내 배포라면 폴더 형태를 zip 으로 묶어 나눠 주는 편이 낫다.
 #
 #  변수 이름은 반드시 영문으로 씁니다. bash 는 한글 변수 이름을 변수로 보지 않고
 #  명령으로 실행하려 들어 "command not found" 로 죽습니다. (설명·메시지는 한글)
@@ -64,11 +68,29 @@ sed -i 's/이름 = "한글문서도우미"/이름 = "HwpKit"/' src/hwpkit.spec
 # 4) 결과물 정리
 echo "[4/4] 결과물 정리"
 mkdir -p "$HERE/dist_wine"
-cp src/dist/HwpKit.exe "$HERE/dist_wine/한글문서도우미.exe"
 cd "$HERE/dist_wine"
-echo
-echo "완료: $HERE/dist_wine/한글문서도우미.exe"
-file 한글문서도우미.exe
-sha256sum 한글문서도우미.exe
+
+if [ "${HWPKIT_ONEDIR:-}" = "1" ]; then
+  rm -rf "한글문서도우미"
+  cp -r "$WORK/src/dist/HwpKit" "한글문서도우미"
+  mv "한글문서도우미/HwpKit.exe" "한글문서도우미/한글문서도우미.exe"
+  # 사내 공유 폴더로 나눠 주기 좋게 zip 으로도 묶어 둔다.
+  rm -f "한글문서도우미.zip"
+  if command -v zip >/dev/null 2>&1; then
+    zip -qr "한글문서도우미.zip" "한글문서도우미"
+  fi
+  echo
+  echo "완료(폴더 형태): $HERE/dist_wine/한글문서도우미/한글문서도우미.exe"
+  file "한글문서도우미/한글문서도우미.exe"
+  sha256sum "한글문서도우미/한글문서도우미.exe"
+  [ -f "한글문서도우미.zip" ] && echo "zip: $HERE/dist_wine/한글문서도우미.zip"
+else
+  cp "$WORK/src/dist/HwpKit.exe" "한글문서도우미.exe"
+  echo
+  echo "완료: $HERE/dist_wine/한글문서도우미.exe"
+  file 한글문서도우미.exe
+  sha256sum 한글문서도우미.exe
+fi
 echo
 echo "이 파일은 서명되지 않았습니다. 보안 경고 대응은 배포안내.md 를 보세요."
+echo "(폴더 형태가 백신 오탐이 가장 적습니다: HWPKIT_ONEDIR=1 bash build_wine.sh)"

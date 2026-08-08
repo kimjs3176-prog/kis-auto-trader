@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, ttk
 from typing import Any, Callable
@@ -61,7 +62,11 @@ from .widgets import (
 __all__ = ["실행하기", "본창"]
 
 _제목 = "한글 문서 도우미"
+
+#: 실행이 이만큼(초) 넘게 안 끝나면 한/글 확인 창을 보라고 알린다.
+_늦은실행초 = 20.0
 _자리글 = "기능 검색 (예: 표, 콤마, PDF)"
+
 
 class 스크롤틀(tk.Frame):
     """세로로 구르는 상자. 안쪽 `내용` 프레임에 위젯을 넣는다."""
@@ -130,6 +135,9 @@ class 본창(tk.Tk):
         self._입력위젯: dict[str, tuple[commands.입력항목, Any]] = {}
         self._알림큐: queue.Queue[str] = queue.Queue()
         self._끝큐: queue.Queue[tuple[commands.명령, str]] = queue.Queue()
+        self._바탕상태큐: queue.Queue[str] = queue.Queue()
+        self._실행시작: float | None = None
+        self._늦다알림 = False
         self._타일들: list[타일] = []
         self._보이는명령: list[commands.명령] = []
         self._칸 = 1
@@ -907,23 +915,32 @@ class 본창(tk.Tk):
 
     # ------------------------------------------------------------------ 실행
     def _실행(self) -> None:
+        """실행을 작업 스레드에 맡긴다.
+
+        **한/글 COM 호출은 절대 이 스레드(UI)에서 하지 않는다.** COM 은 동기
+        호출이라, 한/글이 새로 켜지는 중이거나 확인 창을 띄워 놓고 있으면 호출이
+        돌아오지 않는다. UI 스레드에서 부르면 그 동안 창이 멈추고 닫기(✕)조차
+        처리되지 않는다 — 실제로 '프리즈되고 종료도 안 되는' 현상의 원인이었다.
+        선택·표 상태 확인(`_상태확인`)도 COM 을 쓰므로 여기서 하지 않는다.
+        """
         if self.현재명령 is None:
             self._결과쓰기("먼저 기능 타일을 고르세요.")
             return
         명령하나 = self.현재명령
         값들 = self._입력값모으기()
 
-        준비오류 = self._상태확인(명령하나)
-        if 준비오류:
-            self._결과쓰기(준비오류)
-            return
-
         self.실행단추.잠그기(True)
         self.상태값.set(f"{명령하나.제목} 실행 중…")
+        self._실행시작 = time.monotonic()
+        self._늦다알림 = False
 
         def 일하기() -> None:
-            맥락값 = commands.맥락(문서객체=self.문서객체, 값=값들, 알림=self._알림큐.put)
             try:
+                준비오류 = self._상태확인(명령하나)  # COM 을 쓴다 → 작업 스레드에서
+                if 준비오류:
+                    self._끝큐.put((명령하나, 준비오류))
+                    return
+                맥락값 = commands.맥락(문서객체=self.문서객체, 값=값들, 알림=self._알림큐.put)
                 결과 = 명령하나.실행(맥락값)
                 말 = 결과 if isinstance(결과, str) else f"{명령하나.제목} 완료"
             except Exception as 오류:  # noqa: BLE001
@@ -937,6 +954,7 @@ class 본창(tk.Tk):
 
     def _실행끝(self, 명령하나: commands.명령, 말: str) -> None:
         self.실행단추.잠그기(False)
+        self._실행시작 = None
         self._기본상태 = f"{명령하나.제목} 끝"
         self.상태값.set(self._기본상태)
         self._결과쓰기(말)
@@ -985,24 +1003,61 @@ class 본창(tk.Tk):
             pass
         try:
             while True:
+                self._기본상태 = self._바탕상태큐.get_nowait()
+                if self._실행시작 is None:
+                    self.상태값.set(self._기본상태)
+        except queue.Empty:
+            pass
+        try:
+            while True:
                 명령하나, 말 = self._끝큐.get_nowait()
                 self._실행끝(명령하나, 말)
         except queue.Empty:
             pass
+        self._오래걸리나()
         self.after(80, self._큐확인)
 
+    def _오래걸리나(self) -> None:
+        """한/글이 응답하지 않을 때 무엇을 봐야 하는지 알려 준다.
+
+        한/글이 확인 창을 띄워 놓으면 COM 호출이 돌아오지 않는다. 작업 스레드가
+        기다리는 것이라 창은 멀쩡하지만, 까닭을 모르면 프로그램이 멈춘 것처럼
+        보인다. 그 창을 보라고 알려 준다.
+        """
+        if self._실행시작 is None or self._늦다알림:
+            return
+        if time.monotonic() - self._실행시작 < _늦은실행초:
+            return
+        self._늦다알림 = True
+        self.상태값.set("한/글 응답을 기다립니다 — 한/글 창에 확인 창이 떠 있는지 보세요")
+
     def _연결확인(self) -> None:
+        """한/글 연결 상태를 **작업 스레드에서** 알아본다.
+
+        전에는 창을 만들면서 곧바로 물어봤다. 한/글이 꺼져 있으면 연결이 곧
+        한/글을 새로 띄우는 일이라 수십 초가 걸리고, 그 동안 창이 뜨지도 닫히지도
+        않았다. 이제 알아보는 일은 스레드에 맡기고, 결과만 큐로 받는다.
+        """
         가능, 이유 = 사용가능()
         if not 가능:
             self._기본상태 = "한/글에 연결하지 않음"
             self.상태값.set(self._기본상태)
             return
-        try:
-            버전 = self.문서객체.연결.버전
-            self._기본상태 = f"한/글 연결됨 (버전 {버전})"
-        except 한글오류 as 오류:
-            self._기본상태 = f"한/글 연결 실패 — {오류.메시지} ('진단' 으로 검색)"
+
+        self._기본상태 = "한/글 연결 확인 중…"
         self.상태값.set(self._기본상태)
+
+        def 알아보기() -> None:
+            try:
+                # `상태()` 는 붙어 있으면 알려 주고, 없으면 **새로 띄우지 않는다.**
+                말 = self.문서객체.연결.상태()
+            except 한글오류 as 오류:
+                말 = f"한/글 연결 실패 — {오류.메시지} ('진단' 으로 검색)"
+            except Exception as 오류:  # noqa: BLE001 - COM 은 별별 예외를 낸다
+                말 = f"한/글 연결 실패 — {오류풀이(오류).splitlines()[0]}"
+            self._바탕상태큐.put(말)
+
+        threading.Thread(target=알아보기, daemon=True).start()
 
 
 def 실행하기() -> None:

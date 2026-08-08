@@ -54,6 +54,10 @@ _보안모듈 = ("FilePathCheckDLL", "FilePathCheckerModule")
 #: COM 은 스레드마다 초기화해야 하고, 연결 객체도 스레드별로 두는 편이 안전하다.
 _지역 = threading.local()
 
+#: 연결은 한 번에 하나만. 스레드 둘이 동시에 붙으려 들면 한/글이 두 번 뜬다.
+#: (화면은 시작할 때 상태를 알아보는 스레드를 띄우고, 실행은 또 다른 스레드에서 한다)
+_연결잠금 = threading.Lock()
+
 #: 명령을 받는 통로. 이 중 하나라도 None 이면 아무 기능도 실행할 수 없다.
 받는곳이름 = ("HAction", "HParameterSet")
 
@@ -179,6 +183,31 @@ class 한글연결:
         except Exception:  # noqa: BLE001 - COM 은 별별 예외를 낸다
             return False
 
+    def 상태(self) -> str:
+        """지금 연결 상태를 한 줄로 알려 준다. **한/글을 새로 띄우지 않는다.**
+
+        화면이 시작할 때 상태줄에 쓰려고 부른다. 여기서 연결까지 해 버리면 프로그램을
+        켜기만 해도 한/글이 떠서 사용자를 놀라게 하고, 그 동안 화면이 멈춘다.
+        """
+        가능, 이유 = 사용가능()
+        if not 가능:
+            return "한/글에 연결하지 않음"
+
+        객체 = getattr(_지역, "한글", None)
+        if 객체 is None or not self._살아있나(객체):
+            _COM준비()
+            객체 = self._실행중찾기()
+        if 객체 is None:
+            return "한/글이 켜져 있지 않습니다 — 기능을 실행하면 자동으로 켭니다"
+
+        _지역.한글 = 객체
+        이유 = 받을수있나(객체)
+        꼬리 = "" if not 이유 else " · 편집할 문서가 없습니다(실행하면 새 문서를 만듭니다)"
+        try:
+            return f"한/글 연결됨 (버전 {객체.Version}){꼬리}"
+        except Exception:  # noqa: BLE001 # pragma: no cover
+            return f"한/글 연결됨{꼬리}"
+
     def 연결(self) -> Any:
         """한/글에 연결한다. 실행 중이면 붙고, 없으면 새로 띄운다."""
         가능, 이유 = 사용가능()
@@ -187,6 +216,10 @@ class 한글연결:
 
         _COM준비()
 
+        with _연결잠금:
+            return self._연결하기()
+
+    def _연결하기(self) -> Any:
         객체 = self._실행중찾기()
         if 객체 is not None:
             이유 = 준비기다리기(객체)
