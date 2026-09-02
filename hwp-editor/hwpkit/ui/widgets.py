@@ -767,6 +767,17 @@ class 고르는칸(tk.Canvas):
 
         창 = tk.Toplevel(self)
         창.overrideredirect(True)  # 제목줄 없는 작은 창
+        # 주 창이 '항상 위'(-topmost)면, topmost 가 아닌 목록은 주 창 **뒤에** 열린다.
+        # 그러면 grab 이 걸려 있어 아무 클릭도 안 먹어 화면이 멈춘 것처럼 보인다.
+        # 그래서 목록도 위로 띄우고, 부모 창에 딸린 창으로 표시한다.
+        try:
+            창.attributes("-topmost", True)
+        except tk.TclError:  # pragma: no cover - 일부 플랫폼
+            pass
+        try:
+            창.transient(self.winfo_toplevel())
+        except tk.TclError:  # pragma: no cover
+            pass
         창.configure(bg=theme.카드)
         창.geometry(
             f"{폭}x{높이}+{self.winfo_rootx()}+{self.winfo_rooty() + self._높이 + 3}"
@@ -811,8 +822,13 @@ class 고르는칸(tk.Canvas):
         판.bind("<Button-1>", lambda 사건: self._골랐다(사건, 판, 줄높이))
         판.bind("<Motion>", lambda 사건: self._가리킴(사건, 판, 줄높이))
         창.bind("<Escape>", lambda _사건: self.접기())
-        창.grab_set()  # 바깥을 눌러도 이 창이 먼저 받는다 → 그때 닫는다
+        창.lift()
         self._목록창 = 창
+        # 바깥을 누르면 닫는다. 잡기(grab)는 쓰지 않는다 — 제목줄 없는(overrideredirect)
+        # 창은 잡기 focus 를 못 받는 환경이 있어, 잡기만 걸린 채 아무 클릭도 안 먹어
+        # 화면이 얼어붙는다(특히 주 창이 '항상 위' 일 때). 대신 앱 전체 클릭을 잠깐
+        # 엿보다가, 목록 밖을 누르면 접는다.
+        self._바깥표 = self.bind_all("<Button-1>", self._바깥눌림, add="+")
 
     def _몇번째(self, 사건: Any, 줄높이: int) -> int | None:
         번 = int((사건.y - 5) // 줄높이)
@@ -835,15 +851,28 @@ class 고르는칸(tk.Canvas):
             self.값넣기(self._값들[번])
         self.접기()
 
+    def _바깥눌림(self, 사건: Any) -> None:
+        """목록 밖을 누르면 접는다. (목록 안 클릭은 `_골랐다` 가 처리한다)"""
+        창 = self._목록창
+        if 창 is None:
+            return
+        누른것 = getattr(사건, "widget", None)
+        마디 = 누른것
+        while 마디 is not None:
+            if 마디 is 창:
+                return  # 목록 안을 눌렀다 → 그대로 둔다
+            마디 = getattr(마디, "master", None)
+        self.접기()
+
     def 접기(self) -> None:
         창, self._목록창 = self._목록창, None
+        표, self._바깥표 = getattr(self, "_바깥표", None), None
+        if 표 is not None:
+            try:
+                self.unbind_all("<Button-1>")  # 우리 감시를 떼고
+            except tk.TclError:  # pragma: no cover
+                pass
         if 창 is not None:
-            with_동작 = getattr(창, "grab_release", None)
-            if with_동작 is not None:
-                try:
-                    with_동작()
-                except tk.TclError:  # pragma: no cover - 이미 닫힌 경우
-                    pass
             창.destroy()
 
 

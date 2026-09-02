@@ -440,3 +440,25 @@ def test_시작할때_연결확인은_스레드에_맡긴다():
     몸통 = 본문[시작:끝]
     assert "threading.Thread" in 몸통, "_연결확인 이 스레드를 쓰지 않습니다"
     assert "연결.상태()" in 몸통, "상태만 알아보는 `상태()` 를 써야 합니다(새로 띄우지 않음)"
+
+
+# ---------------------------------------------- 드롭다운이 화면을 얼리지 않는다
+def test_드롭다운은_grab_set을_쓰지_않는다():
+    """제목줄 없는(overrideredirect) 목록 창에 `grab_set()` 을 걸면, 잡기 focus 를
+    못 받는 환경에서 아무 클릭도 안 먹어 화면이 얼어붙는다(특히 주 창이 '항상 위'
+    일 때). 그래서 grab 대신 바깥 클릭을 엿보아 닫는다.
+    """
+    본문 = (Path(__file__).resolve().parent.parent / "hwpkit" / "ui" / "widgets.py").read_text(
+        encoding="utf-8"
+    )
+    assert "grab_set(" not in 본문, "드롭다운이 grab_set 을 씁니다(프리즈 원인)"
+
+
+def test_드롭다운_목록은_위로_뜬다():
+    """주 창이 '항상 위' 여도 목록이 그 뒤로 숨지 않도록 목록도 -topmost 로 띄운다."""
+    본문 = (Path(__file__).resolve().parent.parent / "hwpkit" / "ui" / "widgets.py").read_text(
+        encoding="utf-8"
+    )
+    펼치기 = 본문[본문.index("def 펼치기") : 본문.index("def ", 본문.index("def 펼치기") + 5)]
+    assert '"-topmost"' in 펼치기, "목록 창을 -topmost 로 띄우지 않습니다"
+    assert "_바깥눌림" in 본문, "바깥 클릭으로 닫는 길이 없습니다"
